@@ -32,3 +32,21 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.post("/search", response_model=SearchResponse)
+async def search(req: SearchQuery) -> SearchResponse:
+    """Run the full LangGraph search pipeline and return the answer."""
+    result = search_graph.invoke(
+        {
+            "query": req.query,
+            "routing": "",
+            "documents": [],
+            "response": "",
+        }
+    )
+    return SearchResponse(
+        answer=result["response"],
+        routing=result["routing"],
+        sources=result["documents"],
+    )
