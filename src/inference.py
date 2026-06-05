@@ -46,6 +46,9 @@ class LocalLLM:
                 stop=["<end_of_turn>", "<start_of_turn>"],
             )
             text = output["choices"][0]["text"]
+            # Strip Gemma 4 channel markers (e.g., <|channel>thought\n<channel|>)
+            import re
+            text = re.sub(r'<\|channel\>.*?<channel\|>', '', text, flags=re.DOTALL)
             return text.strip()
         except Exception as exc:
             logger.exception("LLM generation failed")
