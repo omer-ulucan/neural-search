@@ -10,6 +10,12 @@ search:
     - html
     - json
 
+server:
+  secret_key: "change_me_in_production"
+  limiter: false
+  image_proxy: false
+  method: "GET"
+
 engines:
   - name: google
     engine: google
@@ -23,7 +29,6 @@ engines:
     categories: general
     enabled: true
 
-server:
-  secret_key: "change_me_in_production"
-  limiter: false
-  image_proxy: false
+doi_resolvers:
+  default: "https://doi.org"
+
