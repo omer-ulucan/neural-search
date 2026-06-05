@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.database import init_qdrant
@@ -32,6 +34,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory="src/static"), name="static")
+
+
+@app.get("/")
+async def serve_ui() -> FileResponse:
+    """Serve the main search UI."""
+    return FileResponse("src/static/index.html")
 
 
 @app.post("/search", response_model=SearchResponse)
