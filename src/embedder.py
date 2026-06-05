@@ -21,3 +21,9 @@ class LocalHybridEmbedder:
             torch_dtype=torch.float32,
         )
         self.sparse_model.eval()
+
+    def get_dense(self, text: str) -> list[float]:
+        """Encode text into a dense vector using BGE with L2 normalization."""
+        embedding = self.dense_model.encode(text, normalize_embeddings=True)
+        return embedding.tolist()
+
