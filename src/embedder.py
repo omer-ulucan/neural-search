@@ -27,3 +27,24 @@ class LocalHybridEmbedder:
         embedding = self.dense_model.encode(text, normalize_embeddings=True)
         return embedding.tolist()
 
+    def get_sparse(self, text: str) -> dict[int, float]:
+        """Extract a SPLADE log-relu sparse vector with nonzero filtering."""
+        inputs = self.sparse_tokenizer(
+            text,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors="pt",
+        )
+        with torch.no_grad():
+            output = self.sparse_model(**inputs)
+        activations = torch.log(1 + torch.relu(output.logits))
+        attention_mask = inputs["attention_mask"]
+        masked = activations * attention_mask.unsqueeze(-1)
+        vec = masked.max(dim=1).values.squeeze()
+        nonzero = torch.nonzero(vec, as_tuple=False)
+        result = {int(idx): float(vec[idx]) for idx in nonzero.flatten()}
+        if not result:
+            raise ValueError("SPLADE produced empty sparse vector")
+        return result
+
