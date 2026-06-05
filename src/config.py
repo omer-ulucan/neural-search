@@ -1,12 +1,14 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+    """Application settings loaded from environment variables and .env file."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     QDRANT_HOST: str = "http://localhost:6333"
     COLLECTION_NAME: str = "technical_docs"
-    MODEL_PATH: str  # must be set via env var MODEL_PATH
+    MODEL_PATH: str  # must be set via env var MODEL_PATH or .env file
     SEARXNG_HOST: str = "http://localhost:8080"
     DENSE_DIM: int = 1024
     N_CTX: int = 8192
