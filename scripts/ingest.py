@@ -11,6 +11,17 @@ from src.embedder import LocalHybridEmbedder
 logger = logging.getLogger(__name__)
 
 
+def _read_text_file(fpath: str) -> str:
+    """Read a text file trying utf-8, utf-8-sig, and latin-1 encodings."""
+    for enc in ("utf-8", "utf-8-sig", "latin-1"):
+        try:
+            with open(fpath, "r", encoding=enc) as fh:
+                return fh.read()
+        except UnicodeDecodeError:
+            continue
+    raise UnicodeDecodeError(f"Could not decode {fpath} with any supported encoding")
+
+
 def main() -> None:
     """Ingest .txt documents into the hybrid neural search engine."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -26,8 +37,7 @@ def main() -> None:
         if not fname.endswith(".txt"):
             continue
         fpath = os.path.join(args.docs_dir, fname)
-        with open(fpath, "r", encoding="utf-8") as fh:
-            text = fh.read()
+        text = _read_text_file(fpath)
         logger.info("Processing %s (%d chars)", fname, len(text))
         dense_vec = embedder.get_dense(text)
         sparse_vec = embedder.get_sparse(text)
