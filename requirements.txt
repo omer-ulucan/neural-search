@@ -4,7 +4,7 @@ uvicorn[standard]==0.30.0
 pydantic-settings==2.3.0
 langgraph==0.2.0
 langchain-core==0.2.27
-llama-cpp-python==0.2.80
+llama-cpp-python>=0.3.25
 sentence-transformers==3.0.0
 transformers==4.40.0
 torch==2.3.0
