@@ -22,22 +22,19 @@ class LocalLLM:
         )
 
     def build_rag_prompt(self, query: str, contexts: list[str]) -> str:
-        """Build a ChatML prompt with numbered context injection."""
-        system_msg = (
-            "You are a precise technical assistant. Answer based strictly on the provided context. "
-            "If the context is insufficient, say so explicitly."
-        )
+        """Build a Gemma 4 chat prompt with numbered context injection."""
         context_block = "\n\n".join(
             f"[{i + 1}] {ctx}" for i, ctx in enumerate(contexts)
         )
         prompt = (
-            f"<|im_start|>system\n{system_msg}<|im_end|>\n"
-            f"<|im_start|>user\n"
+            f"<start_of_turn>user\n"
             f"Context:\n{context_block}\n\n"
-            f"Question: {query}<|im_end|>\n"
-            f"<|im_start|>assistant\n"
+            f"Question: {query}\n"
+            f"<end_of_turn>\n"
+            f"<start_of_turn>model\n"
         )
         return prompt
+
 
     def generate(self, prompt: str, temperature: float = 0.2, max_tokens: int = 1024) -> str:
         """Generate text from the LLM with stop sequences and error handling."""
