@@ -44,3 +44,27 @@ def router_node(state: AgentState) -> AgentState:
         logger.warning("Unexpected router decision: %s; defaulting to local", decision)
         decision = "local"
     return {**state, "routing": decision}
+
+
+def local_search_node(state: AgentState) -> AgentState:
+    """Retrieve top documents using hybrid dense + sparse RRF over Qdrant."""
+    dense_vec = embedder.get_dense(state["query"])
+    sparse_vec = embedder.get_sparse(state["query"])
+    results = qdrant_client.query_points(
+        collection_name=settings.COLLECTION_NAME,
+        prefetch=[
+            models.Prefetch(query=dense_vec, using="", limit=10),
+            models.Prefetch(
+                query=models.SparseVector(
+                    indices=list(sparse_vec.keys()),
+                    values=list(sparse_vec.values()),
+                ),
+                using="lexical-sparse",
+                limit=10,
+            ),
+        ],
+        query=models.FusionQuery(fusion=models.Fusion.RRF),
+        limit=5,
+    )
+    texts = [r.payload["text"] for r in results.points]
+    return {**state, "documents": texts}
