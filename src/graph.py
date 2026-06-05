@@ -92,3 +92,10 @@ def web_search_node(state: AgentState) -> AgentState:
         logger.warning("Web search failed; returning empty documents")
         return {**state, "documents": []}
     return {**state, "documents": snippets}
+
+
+def generator_node(state: AgentState) -> AgentState:
+    """Generate an answer using retrieved documents and the local LLM."""
+    prompt = llm.build_rag_prompt(state["query"], state["documents"])
+    answer = llm.generate(prompt)
+    return {**state, "response": answer}
