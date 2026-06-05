@@ -29,15 +29,16 @@ qdrant_client: QdrantClient = None
 def router_node(state: AgentState) -> AgentState:
     """Classify query as local or web using the LLM."""
     prompt = (
-        f"<|im_start|>system\n"
+        f"<start_of_turn>user\n"
         f"You are a routing assistant. Respond with ONLY the single word 'local' or 'web'.\n"
         f"local = queries about proprietary/internal code, architecture, or docs in a private knowledge base.\n"
-        f"web = queries about open-source frameworks, current events, error messages, general technical knowledge.\n"
-        f"<|im_start|>user\n{state['query']}<|im_end|>\n"
-        f"<|im_start|>assistant\n"
+        f"web = queries about open-source frameworks, current events, error messages, general technical knowledge.\n\n"
+        f"Query: {state['query']}\n"
+        f"<end_of_turn>\n"
+        f"<start_of_turn>model\n"
     )
     try:
-        decision = llm.generate(prompt, temperature=0.1, max_tokens=10).strip().lower()
+        decision = llm.generate(prompt, temperature=0.1, max_tokens=10).strip().lower().split()[0]
     except Exception:
         logger.warning("Router LLM call failed; defaulting to local")
         decision = "local"
