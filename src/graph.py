@@ -99,3 +99,25 @@ def generator_node(state: AgentState) -> AgentState:
     prompt = llm.build_rag_prompt(state["query"], state["documents"])
     answer = llm.generate(prompt)
     return {**state, "response": answer}
+
+
+def route_decision(state: AgentState) -> str:
+    """Return the routing decision for conditional edges."""
+    return state["routing"]
+
+
+workflow = StateGraph(AgentState)
+workflow.add_node("router", router_node)
+workflow.add_node("local_search", local_search_node)
+workflow.add_node("web_search", web_search_node)
+workflow.add_node("generator", generator_node)
+workflow.set_entry_point("router")
+workflow.add_conditional_edges(
+    "router",
+    route_decision,
+    {"local": "local_search", "web": "web_search"},
+)
+workflow.add_edge("local_search", "generator")
+workflow.add_edge("web_search", "generator")
+workflow.add_edge("generator", END)
+search_graph = workflow.compile()
