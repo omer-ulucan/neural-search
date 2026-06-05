@@ -39,3 +39,18 @@ class LocalLLM:
         )
         return prompt
 
+    def generate(self, prompt: str, temperature: float = 0.2, max_tokens: int = 1024) -> str:
+        """Generate text from the LLM with stop sequences and error handling."""
+        try:
+            output = self.llm(
+                prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stop=["</s>", "User:", "\n\nUser"],
+            )
+            text = output["choices"][0]["text"]
+            return text.strip()
+        except Exception as exc:
+            logger.exception("LLM generation failed")
+            raise
+
