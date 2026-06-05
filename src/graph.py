@@ -18,3 +18,8 @@ class AgentState(TypedDict):
     routing: str
     documents: list[str]
     response: str
+
+
+embedder = LocalHybridEmbedder()
+llm = LocalLLM()
+qdrant_client: QdrantClient = None
