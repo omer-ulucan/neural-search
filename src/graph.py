@@ -1,6 +1,7 @@
 import logging
 from typing import TypedDict
 
+import requests
 from langgraph.graph import END, StateGraph
 from qdrant_client import QdrantClient, models
 
@@ -68,3 +69,26 @@ def local_search_node(state: AgentState) -> AgentState:
     )
     texts = [r.payload["text"] for r in results.points]
     return {**state, "documents": texts}
+
+
+def web_search_node(state: AgentState) -> AgentState:
+    """Fallback to SearXNG web search with graceful error handling."""
+    try:
+        resp = requests.get(
+            f"{settings.SEARXNG_HOST}/search",
+            params={
+                "q": state["query"],
+                "format": "json",
+                "engines": "google,bing",
+                "language": "en",
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        raw_results = data.get("results", [])[:3]
+        snippets = [f"{r['title']}: {r['content']}" for r in raw_results]
+    except Exception:
+        logger.warning("Web search failed; returning empty documents")
+        return {**state, "documents": []}
+    return {**state, "documents": snippets}
