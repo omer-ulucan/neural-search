@@ -38,7 +38,11 @@ def router_node(state: AgentState) -> AgentState:
         f"<start_of_turn>model\n"
     )
     try:
-        decision = llm.generate(prompt, temperature=0.1, max_tokens=10).strip().lower().split()[0]
+        raw = llm.generate(prompt, temperature=0.1, max_tokens=10).strip().lower()
+        # Gemma 4 may output channel markers like "<|channel>thought\n<channel|>web"
+        if "<channel|>" in raw:
+            raw = raw.split("<channel|>")[-1]
+        decision = raw.split()[0] if raw.split() else "local"
     except Exception:
         logger.warning("Router LLM call failed; defaulting to local")
         decision = "local"
