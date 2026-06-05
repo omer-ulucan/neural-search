@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>neural search</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #0f0f0f;
+            color: #e5e5e5;
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 48px 24px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 720px;
+        }
+
+        .brand {
+            text-align: center;
+            font-variant: small-caps;
+            font-size: 14px;
+            font-weight: 500;
+            color: #737373;
+            letter-spacing: 0.08em;
+            margin-bottom: 48px;
+            text-transform: lowercase;
+        }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 32px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 18px 24px;
+            padding-right: 60px;
+            background-color: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 14px;
+            color: #e5e5e5;
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            font-weight: 400;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .search-input::placeholder {
+            color: #525252;
+        }
+
+        .search-input:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .search-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #6366f1;
+            border: none;
+            border-radius: 10px;
+            width: 42px;
+            height: 42px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s ease;
+        }
+
+        .search-btn:hover {
+            background-color: #4f46e5;
+        }
+
+        .search-btn svg {
+            width: 18px;
+            height: 18px;
+            color: #fff;
+        }
+
+        .loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 40px 0;
+            color: #737373;
+            font-size: 14px;
+        }
+
+        .loading.active {
+            display: flex;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #2a2a2a;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .results {
+            opacity: 0;
+            transform: translateY(12px);
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+
+        .results.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .answer-card {
+            background-color: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .answer-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: #6366f1;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 12px;
+        }
+
+        .answer-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #d4d4d4;
+            white-space: pre-wrap;
+        }
+
+        .meta-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .routing-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .routing-badge.local {
+            background-color: rgba(99, 102, 241, 0.12);
+            color: #818cf8;
+        }
+
+        .routing-badge.web {
+            background-color: rgba(251, 191, 36, 0.12);
+            color: #fbbf24;
+        }
+
+        .routing-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: currentColor;
+        }
+
+        .sources-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            padding: 16px 0;
+            border-top: 1px solid #2a2a2a;
+            user-select: none;
+        }
+
+        .sources-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #a3a3a3;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sources-count {
+            background-color: #2a2a2a;
+            color: #737373;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .chevron {
+            width: 16px;
+            height: 16px;
+            color: #525252;
+            transition: transform 0.2s ease;
+        }
+
+        .sources-header.open .chevron {
+            transform: rotate(180deg);
+        }
+
+        .sources-list {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            padding-bottom: 8px;
+        }
+
+        .sources-list.open {
+            display: flex;
+        }
+
+        .source-card {
+            background-color: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            padding: 14px 18px;
+            cursor: pointer;
+            transition: border-color 0.2s ease;
+        }
+
+        .source-card:hover {
+            border-color: #3a3a3a;
+        }
+
+        .source-number {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            background-color: #2a2a2a;
+            color: #737373;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            text-align: center;
+            line-height: 20px;
+            margin-right: 10px;
+        }
+
+        .source-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #a3a3a3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .source-text.expanded {
+            -webkit-line-clamp: unset;
+            display: block;
+            color: #d4d4d4;
+        }
+
+        .error-card {
+            background-color: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 14px;
+            padding: 20px 24px;
+            color: #fca5a5;
+            font-size: 14px;
+            line-height: 1.6;
+            display: none;
+        }
+
+        .error-card.visible {
+            display: block;
+        }
+
+        .error-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="brand">neural search</div>
+
+        <div class="search-box">
+            <input type="text" class="search-input" id="queryInput" placeholder="Ask anything..." autocomplete="off">
+            <button class="search-btn" id="searchBtn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <span>Searching...</span>
+        </div>
+
+        <div class="error-card" id="errorCard">
+            <div class="error-title">Something went wrong</div>
+            <div id="errorText"></div>
+        </div>
+
+        <div class="results" id="results">
+            <div class="answer-card">
+                <div class="answer-label">Answer</div>
+                <div class="answer-text" id="answerText"></div>
+            </div>
+
+            <div class="meta-row">
+                <span class="routing-badge" id="routingBadge"></span>
+            </div>
+
+            <div class="sources-section" id="sourcesSection">
+                <div class="sources-header" id="sourcesHeader">
+                    <div class="sources-title">
+                        Sources
+                        <span class="sources-count" id="sourcesCount"></span>
+                    </div>
+                    <svg class="chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </div>
+                <div class="sources-list" id="sourcesList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const queryInput = document.getElementById('queryInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const errorCard = document.getElementById('errorCard');
+        const errorText = document.getElementById('errorText');
+        const answerText = document.getElementById('answerText');
+        const routingBadge = document.getElementById('routingBadge');
+        const sourcesSection = document.getElementById('sourcesSection');
+        const sourcesHeader = document.getElementById('sourcesHeader');
+        const sourcesCount = document.getElementById('sourcesCount');
+        const sourcesList = document.getElementById('sourcesList');
+
+        let isSourcesOpen = false;
+
+        sourcesHeader.addEventListener('click', () => {
+            isSourcesOpen = !isSourcesOpen;
+            sourcesHeader.classList.toggle('open', isSourcesOpen);
+            sourcesList.classList.toggle('open', isSourcesOpen);
+        });
+
+        async function performSearch() {
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            results.classList.remove('visible');
+            errorCard.classList.remove('visible');
+            loading.classList.add('active');
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                renderResults(data);
+            } catch (err) {
+                errorText.textContent = err.message || 'Unknown error occurred';
+                errorCard.classList.add('visible');
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        function renderResults(data) {
+            answerText.textContent = data.answer || 'No answer generated.';
+
+            const routing = (data.routing || 'local').toLowerCase();
+            routingBadge.textContent = routing;
+            routingBadge.className = 'routing-badge ' + routing;
+
+            const sources = data.sources || [];
+            sourcesCount.textContent = sources.length;
+
+            sourcesList.innerHTML = '';
+            sources.forEach((source, index) => {
+                const card = document.createElement('div');
+                card.className = 'source-card';
+                card.innerHTML = `<span class="source-number">${index + 1}</span><span class="source-text">${escapeHtml(source)}</span>`;
+                card.addEventListener('click', () => {
+                    const text = card.querySelector('.source-text');
+                    text.classList.toggle('expanded');
+                });
+                sourcesList.appendChild(card);
+            });
+
+            isSourcesOpen = false;
+            sourcesHeader.classList.remove('open');
+            sourcesList.classList.remove('open');
+
+            results.classList.add('visible');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        queryInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        searchBtn.addEventListener('click', performSearch);
+    </script>
+</body>
+</html>
