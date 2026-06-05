@@ -22,4 +22,13 @@ class SearchResponse(BaseModel):
     sources: list[str]
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize Qdrant client on application startup."""
+    import src.graph as graph_module
+
+    graph_module.qdrant_client = init_qdrant()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
