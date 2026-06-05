@@ -43,7 +43,7 @@ class LocalLLM:
                 prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                stop=["</s>", "User:", "\n\nUser"],
+                stop=["<end_of_turn>", "<start_of_turn>"],
             )
             text = output["choices"][0]["text"]
             return text.strip()
