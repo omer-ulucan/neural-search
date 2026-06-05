@@ -1,0 +1,29 @@
+general:
+  debug: false
+  instance_name: "searxng"
+  
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  formats:
+    - html
+    - json
+
+engines:
+  - name: google
+    engine: google
+    shortcut: go
+    categories: general
+    enabled: true
+    
+  - name: bing
+    engine: bing
+    shortcut: bi
+    categories: general
+    enabled: true
+
+server:
+  secret_key: "change_me_in_production"
+  limiter: false
+  image_proxy: false
