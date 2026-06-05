@@ -1,34 +1,51 @@
 general:
   debug: false
-  instance_name: "searxng"
-  
+  instance_name: "SearXNG"
+
 search:
   safe_search: 0
   autocomplete: ""
   default_lang: "en"
+  default_doi_resolver:
+    - "https://doi.org"
   formats:
     - html
     - json
+    - csv
+    - rss
 
 server:
   secret_key: "change_me_in_production"
   limiter: false
   image_proxy: false
   method: "GET"
+  default_http_headers:
+    X-Content-Type-Options: nosniff
+    X-Download-Options: noopen
+    X-Robots-Tag: noindex, nofollow
+    Referrer-Policy: no-referrer
+
+ui:
+  default_theme: simple
+  static_use_hash: true
 
 engines:
   - name: google
     engine: google
     shortcut: go
-    categories: general
-    enabled: true
-    
+    disabled: false
+
   - name: bing
     engine: bing
     shortcut: bi
-    categories: general
-    enabled: true
+    disabled: false
 
-doi_resolvers:
-  default: "https://doi.org"
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    disabled: false
 
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    disabled: false

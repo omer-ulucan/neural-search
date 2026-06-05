@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def init_qdrant() -> QdrantClient:
     """Initialize Qdrant client and create collection if it does not exist."""
-    client = QdrantClient(settings.QDRANT_HOST)
+    client = QdrantClient(settings.QDRANT_HOST, check_compatibility=False)
     if not client.collection_exists(settings.COLLECTION_NAME):
         client.create_collection(
             collection_name=settings.COLLECTION_NAME,
