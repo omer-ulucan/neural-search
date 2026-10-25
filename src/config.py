@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 320  # tokens, below the 512-token limit of BGE and SPLADE
     CHUNK_OVERLAP: int = 48  # tokens, 15% of CHUNK_SIZE
     EMBED_BATCH_SIZE: int = 16
+    RRF_K: int = 60  # RRF smoothing constant, unrelated to how many results are returned
+    TOP_K: int = 5  # results returned (and passed to the LLM as context)
+    CANDIDATE_DEPTH: int = 50  # results fetched from each retriever before fusion
+    DENSE_WEIGHT: float = 1.0
+    SPARSE_WEIGHT: float = 1.0
     N_CTX: int = 8192
     N_THREADS: int = 6
     N_GPU_LAYERS: int = 0
