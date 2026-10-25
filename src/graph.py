@@ -7,7 +7,7 @@ import requests
 from langgraph.graph import END, StateGraph
 
 from src.config import settings
-from src.inference import build_rag_prompt
+from src.inference import INSUFFICIENT_CONTEXT, build_rag_prompt
 from src.retrieval import Retriever
 
 logger = logging.getLogger(__name__)
@@ -120,8 +120,10 @@ def build_search_graph(
         return {**state, "documents": docs}
 
     def generator_node(state: AgentState) -> AgentState:
-        """Generate an answer using retrieved documents and the local LLM."""
-        prompt = build_rag_prompt(state["query"], [d["text"] for d in state["documents"]])
+        """Generate a grounded, cited answer from the retrieved documents."""
+        if not state["documents"]:
+            return {**state, "response": INSUFFICIENT_CONTEXT}
+        prompt = build_rag_prompt(state["query"], state["documents"])
         return {**state, "response": llm.generate(prompt)}
 
     workflow = StateGraph(AgentState)

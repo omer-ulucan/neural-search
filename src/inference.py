@@ -14,11 +14,32 @@ def strip_channel_markers(text: str) -> str:
     return _CHANNEL_MARKERS.sub("", text).strip()
 
 
-def build_rag_prompt(query: str, contexts: list[str]) -> str:
-    """Build a Gemma 4 chat prompt with numbered context injection."""
-    context_block = "\n\n".join(f"[{i + 1}] {ctx}" for i, ctx in enumerate(contexts))
+INSUFFICIENT_CONTEXT = "The provided context does not contain enough information to answer this."
+
+RAG_INSTRUCTIONS = (
+    "Answer the question using ONLY the numbered context passages below.\n"
+    "- Cite every claim with the passage number in square brackets, e.g. [1] or [2][3].\n"
+    "- Do not use outside knowledge and do not invent passage numbers.\n"
+    f'- If the passages do not contain the answer, reply exactly: "{INSUFFICIENT_CONTEXT}" '
+    "You may add what the passages do cover, with citations.\n"
+)
+
+
+def format_context(n: int, doc: dict) -> str:
+    """Render one numbered passage with its title and location."""
+    where = doc.get("source") or ""
+    if doc.get("chunk_index") is not None:
+        where = f"{where}, chunk {doc['chunk_index']}"
+    header = f"[{n}] {doc.get('title') or 'Untitled'}" + (f" ({where})" if where else "")
+    return f"{header}\n{doc.get('text', '')}"
+
+
+def build_rag_prompt(query: str, contexts: list[dict]) -> str:
+    """Build a Gemma 4 chat prompt with grounding rules and numbered, attributed passages."""
+    context_block = "\n\n".join(format_context(i + 1, d) for i, d in enumerate(contexts))
     return (
         f"<start_of_turn>user\n"
+        f"{RAG_INSTRUCTIONS}\n"
         f"Context:\n{context_block}\n\n"
         f"Question: {query}\n"
         f"<end_of_turn>\n"
@@ -48,8 +69,8 @@ class LocalLLM:
             verbose=False,
         )
 
-    def build_rag_prompt(self, query: str, contexts: list[str]) -> str:
-        """Build a Gemma 4 chat prompt with numbered context injection."""
+    def build_rag_prompt(self, query: str, contexts: list[dict]) -> str:
+        """Build a Gemma 4 chat prompt with grounding rules and numbered passages."""
         return build_rag_prompt(query, contexts)
 
     def generate(self, prompt: str, temperature: float = 0.2, max_tokens: int = 1024) -> str:
