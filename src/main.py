@@ -9,13 +9,15 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.config import settings
 from src.graph import build_search_graph
-from src.retrieval import Retriever
+from src.retrieval import Hit, Mode, RetrievalResult, Retriever
 
 logger = logging.getLogger(__name__)
+
+SNIPPET_CHARS = 280
 
 
 class SearchQuery(BaseModel):
@@ -30,6 +32,89 @@ class SearchResponse(BaseModel):
     answer: str
     routing: str
     sources: list[str]
+
+
+class RetrieveRequest(BaseModel):
+    """Request model for the retrieval-only endpoint."""
+
+    query: str = Field(min_length=1, max_length=1000)
+    top_k: int = Field(10, ge=1, le=50)
+    rrf_k: int | None = Field(None, ge=0, le=1000, description="Defaults to RRF_K")
+
+
+class RetrievedItem(BaseModel):
+    """One ranked chunk."""
+
+    rank: int
+    score: float
+    id: str
+    title: str
+    source: str
+    chunk_index: int | None
+    snippet: str
+    dense_rank: int | None = None
+    sparse_rank: int | None = None
+
+
+class FusionWeights(BaseModel):
+    """RRF weights used for the fused list, with the reasons that produced them."""
+
+    dense: float
+    sparse: float
+    reasons: list[str]
+
+
+class RetrieveResponse(BaseModel):
+    """Per-retriever rankings plus the weighted RRF fusion of both."""
+
+    query: str
+    top_k: int
+    rrf_k: int
+    weights: FusionWeights
+    sparse_fallback: bool
+    sparse: list[RetrievedItem]
+    dense: list[RetrievedItem]
+    fused: list[RetrievedItem]
+    timing_ms: dict[str, float]
+
+
+def snippet(text: str, limit: int = SNIPPET_CHARS) -> str:
+    """Collapse whitespace and cut text to at most `limit` characters on a word boundary."""
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0] + "..."
+
+
+def to_item(hit: Hit) -> RetrievedItem:
+    p = hit.payload
+    return RetrievedItem(
+        rank=hit.rank,
+        score=hit.score,
+        id=hit.id,
+        title=p.get("title", ""),
+        source=p.get("source", ""),
+        chunk_index=p.get("chunk_index"),
+        snippet=snippet(p.get("text", "")),
+        dense_rank=hit.dense_rank,
+        sparse_rank=hit.sparse_rank,
+    )
+
+
+def to_response(query: str, res: RetrievalResult) -> RetrieveResponse:
+    return RetrieveResponse(
+        query=query,
+        top_k=res.top_k,
+        rrf_k=res.rrf_k,
+        weights=FusionWeights(
+            dense=res.weights.dense, sparse=res.weights.sparse, reasons=list(res.weights.reasons)
+        ),
+        sparse_fallback=res.sparse_fallback,
+        sparse=[to_item(h) for h in res.sparse],
+        dense=[to_item(h) for h in res.dense],
+        fused=[to_item(h) for h in res.fused],
+        timing_ms={k: round(v, 2) for k, v in res.timings_ms.items()},
+    )
 
 
 @dataclass
@@ -94,6 +179,16 @@ def create_app(resource_factory: Callable[[], Resources] = load_resources) -> Fa
             routing=result["routing"],
             sources=[d["text"] for d in result["documents"]],
         )
+
+    @app.post("/retrieve", response_model=RetrieveResponse)
+    async def retrieve(req: RetrieveRequest, request: Request) -> RetrieveResponse:
+        """Hybrid retrieval only (no router, no LLM): sparse, dense and fused rankings."""
+        retriever: Retriever = request.app.state.resources.retriever
+        mode: Mode = "hybrid"
+        res = await run_in_threadpool(
+            retriever.retrieve, req.query, mode, req.top_k, rrf_k=req.rrf_k
+        )
+        return to_response(req.query, res)
 
     @app.get("/health")
     async def health() -> dict:
