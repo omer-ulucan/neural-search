@@ -1,282 +1,236 @@
-# Local Hybrid Neural Search Engine
+# neural-search
 
-A fully-local hybrid neural search engine that combines dense embeddings (BGE), sparse lexical embeddings (SPLADE), and LLM-powered retrieval-augmented generation (RAG). Queries are automatically routed to a private Qdrant knowledge base or to the web via SearXNG using a LangGraph state machine.
+Hybrid retrieval for technical documentation, fully local. Documents are chunked and indexed twice in Qdrant, as dense BGE-large embeddings and as SPLADE learned sparse vectors, and every query fuses both rankings with weighted Reciprocal Rank Fusion. On top of that retrieval core sits an answering layer: a LangGraph router sends each question to the local index or to a SearXNG web search, and a local Gemma model writes a cited answer from what was retrieved.
 
-## Architecture
+Retrieval quality is measured on a public benchmark (BEIR CQADupStack) and latency on the machine it ran on. Every number below is generated from `results/*.json` by a script; see [Reproduce](#reproduce).
+
+## How retrieval works
 
 ```
-                    +-------------+
-                    |   User      |
-                    +------+------+
-                           |
-                           v
-              +------------------------+
-              |  FastAPI /search       |
-              |  Dark Mode UI          |
-              +-----------+------------+
+                 .txt / .md documents
                           |
-                          v
-              +------------------------+
-              |  LangGraph StateGraph  |
-              |  - router_node         |
-              |  - local_search_node   |
-              |  - web_search_node     |
-              |  - generator_node      |
-              +-----------+------------+
+              token-aware chunking (320 tokens, 48 overlap)
+              stable ids: uuid5(source#chunk_index)
                           |
-            +-------------+-------------+
-            |                           |
-            v                           v
-   +----------------+        +------------------+
-   | Qdrant (local) |        | SearXNG (web)    |
-   | Hybrid RRF     |        | Google + Bing    |
-   | Dense + Sparse |        | JSON API         |
-   +--------+-------+        +--------+---------+
-            |                           |
-            +-------------+-------------+
+          +---------------+----------------+
+          |                                |
+  BGE-large-en-v1.5                 SPLADE (cocondenser-
+  1024-d dense, cosine              ensembledistil), sparse
+          |                                |
+          +------> Qdrant collection <-----+
+                   dense HNSW index + sparse inverted index
                           |
-                          v
-               +---------------------+
-               | llama.cpp Local LLM |
-               | Gemma 4 12B Q4_K_M  |
-               | Gemma Chat Template |
-               +---------------------+
+   query --> encode both --> one batched Qdrant request
+                          |
+              dense ranking     sparse ranking
+                    \              /
+             weighted RRF: sum_i w_i / (k + rank_i), k = 60
+                          |
+                    fused ranking
 ```
 
-## Prerequisites
+- **Dense path.** `BAAI/bge-large-en-v1.5` via sentence-transformers, L2-normalised 1024-d vectors, cosine distance in Qdrant's HNSW index.
+- **Sparse path.** `naver/splade-cocondenser-ensembledistil`, a learned sparse model that expands queries and documents over the BERT vocabulary. It is not BM25; BM25 appears only as a baseline in the evaluation.
+- **Chunking.** Each document is split into windows of at most 320 tokens with 48 tokens (15%) overlap, measured with the same WordPiece vocabulary both models use, so neither model truncates. Chunks keep their original text and store `source`, `title`, `chunk_index` and character offsets.
+- **Idempotent ingestion.** Point ids are `uuid5(source#chunk_index)` and every point carries a fingerprint of its document text plus chunking and model config. Re-running ingestion skips unchanged documents, re-embeds changed ones, deletes chunks a shrunken document no longer produces, and prunes documents that were removed from the folder.
+- **Fusion.** Weighted RRF with 1-based ranks: `score(d) = sum_i w_i / (rrf_k + rank_i(d))`. `rrf_k` (default 60) is the smoothing constant and is independent of `top_k`, the number of results returned. A document missing from one ranking gets nothing from it, and ties are broken by best single-list rank, then id, so results are deterministic.
+- **Why fusion is client-side.** Qdrant 1.20 has a parameterised RRF query, but probing it against a live server showed 0-based ranks (rank 1 in both lists scores 2/60, not 2/61) and weights that do not follow `w_i / (k + rank_i)`. Both per-retriever rankings come back from one batched request anyway, which is also what the demo endpoint returns.
+- **Dynamic weights (optional).** `src/weighting.py` leans the fusion towards SPLADE for queries with exact-match signals (identifiers, code, paths, file names, flags, error codes, versions, quoted text) and towards the dense model for natural-language questions, and records the reasons. It is off by default; whether it earns its place is decided by the evaluation below.
+- **Empty sparse vectors.** If SPLADE maps a query to an empty vector, hybrid retrieval falls back to dense-only for that query and logs it.
 
-- Docker & Docker Compose
-- Python 3.11+
-- ~8GB disk space for the model
+## Answering layer
+
+```
+ POST /search --> LangGraph router (Gemma) --+--> local: hybrid retrieval (top 5 chunks)
+                                             |
+                                             +--> web: SearXNG (Google + Bing), top 3
+                                                          |
+                                Gemma 4 12B (llama.cpp) answers ONLY from the
+                                numbered passages and cites them as [n]
+```
+
+The router asks Gemma for one word, `local` or `web`; anything else (including Gemma's thinking-channel markers or garbage) falls back to `local`. The answer prompt tells the model to use only the numbered passages, cite them as `[n]`, and say when the passages are not enough. `/search` returns the answer, the route, and the sources with title, location and chunk index, numbered to match the citations.
+
+## Results
+
+<!-- eval:start -->
+Not measured yet. Run `python scripts/eval.py` and then this script.
+<!-- eval:end -->
+
+## Latency
+
+<!-- bench:start -->
+Not measured yet. Run `python scripts/bench.py` and then this script.
+<!-- bench:end -->
+
+## Reproduce
+
+```bash
+pip install -r requirements-dev.txt
+docker compose up -d qdrant
+
+# Download BEIR CQADupStack (pinned revision), index it through the normal ingestion path,
+# verify the index, tune on the dev split and report on the test split.
+python scripts/eval.py --subforums webmasters        # writes results/eval.json
+
+# Verify the indexed corpus, then time retrieval in process, /retrieve under load,
+# and /search end to end. Needs the GGUF model for the last part (or pass --skip-e2e).
+python scripts/bench.py --model-path models/gemma-4-12B-it-Q4_0.gguf   # writes results/bench.json
+
+python scripts/make_readme_tables.py                 # regenerates the tables above
+```
+
+`--subforums` accepts any CQADupStack subforum (for example `unix programmers webmasters`); results are averaged across them and every selection uses the mean dev score. Indexing is resumable: an interrupted run picks up where it stopped. On a CPU-only laptop, embedding the 17k-document webmasters corpus with BGE-large takes several hours.
 
 ## Setup
 
-### 1. Clone the Repository
+Requirements: Docker, Python 3.11 or 3.12, about 8 GB of disk for the LLM.
 
 ```bash
 git clone <repo-url>
 cd neural-search
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r requirements.txt                        # requirements-dev.txt adds eval and test tools
+cp .env.example .env                                   # then set MODEL_PATH
+docker compose up -d                                   # Qdrant v1.20.0 on :6333, SearXNG on :8080
 ```
 
-### 2. Create and Activate Virtual Environment
-
-```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate it
-# Linux/macOS:
-source .venv/bin/activate
-# Windows:
-.venv\Scripts\activate
-```
-
-### 3. Install Python Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-**Important:** The requirements include:
-- `numpy<2` (required for sentence-transformers compatibility)
-- `llama-cpp-python>=0.3.25` (for Gemma 4 architecture support)
-- `qdrant-client==1.20.0` (matches the Qdrant v1.20.0 server image)
-- `hf_xet` (for faster HuggingFace downloads)
-
-### 4. Download the Gemma 4 Model
-
-The model is automatically downloaded on first run, or you can download it manually:
+Download the LLM (only needed for `/search`; `/retrieve`, eval and bench work without it):
 
 ```bash
 python -c "
 from huggingface_hub import hf_hub_download
-hf_hub_download(
-    repo_id='ggml-org/gemma-4-12B-it-GGUF',
-    filename='gemma-4-12B-it-Q4_K_M.gguf',
-    local_dir='./models'
-)
+hf_hub_download('ggml-org/gemma-4-12B-it-GGUF', 'gemma-4-12B-it-Q4_0.gguf', local_dir='models')
 "
 ```
 
-This downloads the **Gemma 4 12B Instruct** model (Q4_K_M quantization, ~7GB).
+Set `MODEL_PATH` in `.env` to the absolute path of `models/gemma-4-12B-it-Q4_0.gguf`.
 
-### 5. Configure Environment Variables
-
-The `.env` file is automatically loaded by the application. Copy `.env.example` to `.env` and set your model path:
+Ingest a folder of `.txt` and `.md` files (recursively) and start the API:
 
 ```bash
-cp .env.example .env
-```
-
-```env
-MODEL_PATH=/absolute/path/to/neural-search/models/gemma-4-12B-it-Q4_K_M.gguf
-```
-
-**Note:** `MODEL_PATH` must be an **absolute path** to the `.gguf` file.
-
-### 6. Start Docker Services
-
-```bash
-docker compose up -d
-```
-
-This starts:
-- **Qdrant v1.20.0** on `http://localhost:6333` (vector database)
-- **SearXNG** on `http://localhost:8080` (web search fallback)
-
-### 7. Ingest Documents
-
-Place `.txt` files into a directory and run the ingestion script:
-
-```bash
-python scripts/ingest.py --docs-dir ./my-docs
-```
-
-The script automatically:
-- Detects file encoding (UTF-8, UTF-8-sig, Latin-1)
-- Generates dense embeddings (BGE) and sparse embeddings (SPLADE)
-- Stores vectors in Qdrant with hybrid RRF support
-
-### 8. Run the API Server
-
-```bash
+python scripts/ingest.py --docs-dir ./my-docs          # re-run any time; it is idempotent
 python -m uvicorn src.main:app --host 127.0.0.1 --port 8000
 ```
 
-The server will:
-- Load the Gemma 4 model (~30 seconds)
-- Initialize the LangGraph workflow
-- Start serving on `http://localhost:8000`
+Open `http://localhost:8000/` for the web UI.
 
-## Web UI
+## API
 
-Open your browser to `http://localhost:8000/` to access the dark-mode search interface.
+### `POST /retrieve`
 
-**Features:**
-- Dark mode design (background `#0f0f0f`, accent `#6366f1`)
-- Real-time search with loading spinner
-- Routing badge showing LOCAL (indigo) or WEB (amber)
-- Collapsible source cards with expandable text
-- Smooth fade-in animations
-- JetBrains Mono font for results
-
-## API Usage
-
-### Search Endpoint
+Retrieval only, no router and no LLM. Returns the SPLADE ranking, the dense ranking and the fused ranking side by side, which is what the live demo renders.
 
 ```bash
-curl -X POST "http://localhost:8000/search" \
+curl -X POST http://localhost:8000/retrieve \
   -H "Content-Type: application/json" \
-  -d '{"query": "What is Qdrant?"}'
+  -d '{"query": "nginx returns 502 behind a proxy", "top_k": 5}'
 ```
 
-**Response:**
+Request fields: `query` (required), `top_k` (1 to 50, default 10), `rrf_k` (optional override). Response shape:
 
 ```json
 {
-  "answer": "Qdrant is an open-source vector database that supports hybrid search with dense and sparse vectors using reciprocal rank fusion...",
-  "routing": "local",
-  "sources": [
-    "Qdrant is a vector database that supports hybrid search...",
-    "Reciprocal rank fusion is a method for combining..."
-  ]
+  "query": "...", "top_k": 5, "rrf_k": 60,
+  "weights": {"dense": 1.0, "sparse": 1.0, "reasons": []},
+  "sparse_fallback": false,
+  "sparse": [{"rank": 1, "score": 15.4, "id": "...", "title": "...", "source": "...",
+              "chunk_index": 0, "snippet": "...", "dense_rank": null, "sparse_rank": null}],
+  "dense":  [...],
+  "fused":  [{"rank": 1, "score": 0.0328, "...": "...", "dense_rank": 1, "sparse_rank": 1}],
+  "timing_ms": {"dense_encode": 0.0, "sparse_encode": 0.0, "qdrant": 0.0, "fusion": 0.0, "total": 0.0}
 }
 ```
 
-### Health Check
+Scores are raw: cosine similarity for dense, SPLADE dot product for sparse, RRF score for fused.
 
-```bash
-curl http://localhost:8000/health
-# Returns: {"status": "ok"}
+### `POST /search`
+
+Router, retrieval or web search, and a cited answer. Returns `503` when no `MODEL_PATH` is configured.
+
+```json
+{
+  "answer": "Enable gzip in the server config [1] ...",
+  "routing": "local",
+  "sources": [{"n": 1, "title": "...", "source": "speed.md", "chunk_index": 0, "text": "...", "score": 0.0325}]
+}
 ```
 
-## Environment Variables
+### `GET /health`
 
-All variables can be set in `.env` or exported directly. The `.env` file is auto-loaded.
+Returns `{"status": "ok"}`.
+
+## Configuration
+
+All settings are environment variables, also read from `.env` (see `.env.example`).
 
 | Variable | Default | Description |
-|----------|---------|-------------|
-| `MODEL_PATH` | *(required)* | Absolute path to the Gemma 4 GGUF model |
-| `QDRANT_HOST` | `http://localhost:6333` | Qdrant REST API endpoint |
+|---|---|---|
+| `MODEL_PATH` | empty | GGUF file for the router and answers; empty disables `/search` |
+| `QDRANT_HOST` | `http://localhost:6333` | Qdrant URL |
 | `QDRANT_TIMEOUT` | `60` | Seconds per Qdrant request; bulk upserts can outlast the client default of 5 s |
-| `COLLECTION_NAME` | `technical_docs` | Qdrant collection name |
-| `SEARXNG_HOST` | `http://localhost:8080` | SearXNG instance URL |
-| `DENSE_DIM` | `1024` | Dimensionality of dense vectors (BGE-large) |
-| `N_CTX` | `8192` | LLM context window size |
-| `N_THREADS` | `6` | CPU threads for llama.cpp |
-| `N_GPU_LAYERS` | `0` | GPU layers to offload (set to `-1` for all) |
+| `COLLECTION_NAME` | `technical_docs` | Collection the API reads and `ingest.py` writes |
+| `SEARXNG_HOST` | `http://localhost:8080` | SearXNG URL for the web route |
+| `DENSE_MODEL` | `BAAI/bge-large-en-v1.5` | Dense embedding model |
+| `SPARSE_MODEL` | `naver/splade-cocondenser-ensembledistil` | Sparse embedding model |
+| `DENSE_DIM` | `1024` | Dense vector size used when creating a collection |
+| `CHUNK_SIZE` | `320` | Tokens per chunk |
+| `CHUNK_OVERLAP` | `48` | Tokens shared by consecutive chunks |
+| `EMBED_BATCH_SIZE` | `16` | Texts per model forward pass |
+| `RRF_K` | `60` | RRF smoothing constant |
+| `TOP_K` | `5` | Chunks returned to the LLM by `/search` |
+| `CANDIDATE_DEPTH` | `50` | Results fetched from each retriever before fusion |
+| `DENSE_WEIGHT`, `SPARSE_WEIGHT` | `1.0`, `1.0` | Static RRF weights |
+| `DYNAMIC_WEIGHTS` | `false` | Use query-dependent weights instead |
+| `DYNAMIC_STRENGTH` | `0.5` | How far dynamic weights lean, 0 to 1 |
+| `CORS_ORIGINS` | `https://ulucan.dev` and localhost ports | Comma-separated browser origins |
+| `N_CTX`, `N_THREADS`, `N_GPU_LAYERS` | `8192`, `6`, `0` | llama.cpp context, threads, GPU offload |
 
-## Troubleshooting
+## Development
 
-### Model Loading Issues
-
-If you see `Failed to load model from file`:
-- Ensure `MODEL_PATH` in `.env` is an **absolute path**
-- Verify the model file exists and is not corrupted
-- Check that `llama-cpp-python>=0.3.25` is installed (required for Gemma 4)
-
-### NumPy Version Conflict
-
-If you see `NumPy 2.x cannot be run in NumPy 1.x`:
 ```bash
-pip install "numpy<2" --force-reinstall
+pip install -r requirements-dev.txt
+pytest                          # no models, LLM or Qdrant server needed: fakes and in-memory Qdrant
+ruff check . && ruff format --check .
 ```
 
-### Qdrant Client/Server Version Mismatch
-
-If you see version mismatch warnings:
-- Qdrant server and `qdrant-client` are pinned to the same minor version (1.20); keep them in sync
-
-### SearXNG Web Search Fails
-
-If web search returns empty results:
-- Check that `searxng/settings.yml` has `use_default_settings: true`
-- Ensure `formats: [html, json]` is set in the search section
-- Restart SearXNG: `docker compose restart searxng`
-
-### Ingestion Script Import Errors
-
-If you see `ModuleNotFoundError: No module named 'src'`:
-- Ensure you're running from the project root directory
-- The script automatically adds the project root to `sys.path`
-
-## Project Structure
+## Project structure
 
 ```
 neural-search/
-├── docker-compose.yml          # Qdrant + SearXNG services
-├── requirements.txt            # Pinned dependencies
-├── .env.example                # Template for .env (auto-loaded, gitignored)
-├── .gitignore                  # Git ignore rules
-├── README.md                   # This file
-├── models/                     # GGUF model files
-│   └── gemma-4-12B-it-Q4_K_M.gguf
-├── searxng/                    # SearXNG configuration
-│   └── settings.yml
+├── docker-compose.yml          # Qdrant v1.20.0 + SearXNG
+├── requirements*.txt           # runtime, eval/bench, dev
+├── .env.example                # every setting, with defaults
+├── results/                    # eval.json and bench.json, generated
 ├── scripts/
-│   └── ingest.py               # Document ingestion script
-└── src/
-    ├── __init__.py
-    ├── config.py               # Pydantic settings with .env support
-    ├── embedder.py             # BGE dense + SPLADE sparse embeddings
-    ├── database.py             # Qdrant client and operations
-    ├── inference.py            # llama.cpp wrapper with Gemma 4 support
-    ├── graph.py                # LangGraph workflow (router, search, generator)
-    ├── main.py                 # FastAPI app with lifespan
-    └── static/
-        └── index.html          # Dark mode web UI
+│   ├── ingest.py               # idempotent chunked ingestion of .txt/.md
+│   ├── eval.py                 # BEIR CQADupStack evaluation
+│   ├── bench.py                # latency benchmark
+│   └── make_readme_tables.py   # README tables from results/*.json
+├── src/
+│   ├── config.py               # settings
+│   ├── chunking.py             # token-aware chunker
+│   ├── embedder.py             # BGE dense + SPLADE sparse, batched
+│   ├── database.py             # Qdrant collection setup
+│   ├── ingestion.py            # stable ids, fingerprints, stale-chunk cleanup
+│   ├── retrieval.py            # dense / sparse / hybrid retrieval and weighted RRF
+│   ├── weighting.py            # optional query-dependent weights
+│   ├── inference.py            # llama.cpp wrapper and RAG prompt
+│   ├── graph.py                # LangGraph router, local and web search, generator
+│   ├── evaluation.py           # dataset, split, metrics helpers
+│   ├── benchmark.py            # percentiles, workloads, memory sampling
+│   ├── main.py                 # FastAPI app: /retrieve, /search, /health
+│   └── static/index.html       # web UI
+└── tests/                      # pytest suite
 ```
 
-## Key Features
+## Troubleshooting
 
-- **Hybrid Search**: Combines dense (BGE) and sparse (SPLADE) vectors with RRF fusion
-- **Smart Routing**: LLM-based router classifies queries as local or web
-- **Local Knowledge**: Search your private documents in Qdrant
-- **Web Fallback**: Automatic fallback to SearXNG for general knowledge
-- **Gemma 4 12B**: Open-weights LLM prompted with the Gemma chat template
-- **Dark Mode UI**: Clean, minimal interface with smooth animations
-- **Auto-Config**: `.env` file auto-loading, no manual exports needed
-- **Robust Ingestion**: Multi-encoding support, automatic path handling
+- **`/search` returns 503.** `MODEL_PATH` is empty. `/retrieve` works without it.
+- **The server fails to start with a model error.** `MODEL_PATH` must be an absolute path to an existing `.gguf`, and `llama-cpp-python>=0.3.25` is needed for Gemma 4.
+- **Qdrant version warnings or errors.** The server image and `qdrant-client` are both pinned to 1.20. A volume created by an older server (for example v1.12) is several minor versions behind; start from a fresh volume and re-run ingestion.
+- **Web route returns nothing.** `searxng/settings.yml` must keep `use_default_settings: true` and the `json` format; restart with `docker compose restart searxng`.
+- **`NumPy 2.x cannot be run in NumPy 1.x`.** `pip install "numpy<2" --force-reinstall`.
 
 ## License
 
