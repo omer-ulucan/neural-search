@@ -74,6 +74,23 @@ def fake_llm() -> FakeLLM:
 
 
 @pytest.fixture
+def seeded_retriever(memory_qdrant, fake_embedder):
+    """A Retriever over a few small documents in in-memory Qdrant."""
+    from src.database import init_qdrant
+    from src.ingestion import Document, ingest_documents
+    from src.retrieval import Retriever
+
+    client = init_qdrant(memory_qdrant, "seeded", FAKE_DIM)
+    docs = [
+        Document("install.md", "Install", "install the package with pip install neural"),
+        Document("errors.md", "Errors", "error E1234 means the index is corrupt"),
+        Document("fusion.md", "Fusion", "reciprocal rank fusion merges dense and sparse lists"),
+    ]
+    ingest_documents(client, "seeded", docs, fake_embedder, chunk_size=16, chunk_overlap=2)
+    return Retriever(client, fake_embedder, "seeded")
+
+
+@pytest.fixture
 def memory_qdrant():
     from qdrant_client import QdrantClient
 
