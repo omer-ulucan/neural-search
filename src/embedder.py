@@ -51,11 +51,8 @@ class LocalHybridEmbedder:
         return embeddings.tolist()
 
     def get_sparse(self, text: str) -> dict[int, float]:
-        """Extract a SPLADE log-relu sparse vector with nonzero filtering."""
-        result = self.encode_sparse([text])[0]
-        if not result:
-            raise ValueError("SPLADE produced empty sparse vector")
-        return result
+        """Extract a SPLADE log-relu sparse vector with nonzero filtering. May be empty."""
+        return self.encode_sparse([text])[0]
 
     def encode_sparse(
         self, texts: list[str], batch_size: int | None = None

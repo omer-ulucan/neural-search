@@ -192,6 +192,13 @@ class Retriever:
         rrf_k = self.rrf_k if rrf_k is None else rrf_k
         weights = weights or self.weights
         depth = max(top_k, depth or self.depth)
+        sparse_fallback = mode in ("sparse", "hybrid") and not sparse_vec
+        if sparse_fallback:
+            # SPLADE can map a query (e.g. only stopwords or symbols) to an empty vector.
+            logger.warning(
+                "Empty sparse query vector; %s",
+                "falling back to dense-only" if mode == "hybrid" else "no sparse results",
+            )
 
         requests, names = [], []
         if mode in ("dense", "hybrid"):
@@ -201,7 +208,7 @@ class Retriever:
                 )
             )
             names.append("dense")
-        if mode in ("sparse", "hybrid"):
+        if mode in ("sparse", "hybrid") and not sparse_fallback:
             requests.append(
                 models.QueryRequest(
                     query=to_sparse_vector(sparse_vec),
@@ -213,7 +220,9 @@ class Retriever:
             names.append("sparse")
 
         t = time.perf_counter()
-        responses = self.client.query_batch_points(self.collection, requests=requests)
+        responses = (
+            self.client.query_batch_points(self.collection, requests=requests) if requests else []
+        )
         qdrant_ms = _ms(t)
         ranked = {"dense": [], "sparse": []}
         for name, resp in zip(names, responses, strict=True):
@@ -235,6 +244,7 @@ class Retriever:
             sparse=ranked["sparse"][:top_k],
             fused=fused[:top_k],
             timings_ms={"qdrant": qdrant_ms, "fusion": fusion_ms},
+            sparse_fallback=sparse_fallback,
         )
 
     def retrieve(
