@@ -140,10 +140,10 @@ def test_duplicate_sources_are_rejected(client, fake_embedder):
         ingest_documents(client, COLLECTION, docs, fake_embedder, **CFG)
 
 
-def test_read_documents_handles_md_txt_and_nesting(tmp_path):
+def test_read_documents_handles_md_txt_nesting_and_utf16(tmp_path):
     (tmp_path / "guide.md").write_text("intro\n# Install Guide\nbody", encoding="utf-8")
     (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "error_codes.txt").write_text("E42 means bad", encoding="utf-8")
+    (tmp_path / "sub" / "error_codes.txt").write_bytes("E42 means bad".encode("utf-16"))
     (tmp_path / "image.png").write_bytes(b"\x89PNG")
     docs = read_documents(tmp_path)
     assert [(d.source, d.title) for d in docs] == [

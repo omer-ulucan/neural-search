@@ -63,8 +63,10 @@ def fingerprint(doc: Document, config: dict) -> str:
 
 
 def read_text_file(path: Path) -> str:
-    """Decode a text file as UTF-8 (with or without BOM), falling back to latin-1."""
+    """Decode a text file, honouring UTF-16 and UTF-8 byte order marks."""
     raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
     for enc in ("utf-8-sig", "latin-1"):
         try:
             return raw.decode(enc)
