@@ -11,22 +11,38 @@ logger = logging.getLogger(__name__)
 MAX_SEQ_LEN = 512
 
 
+def resolve_device(device: str | None = None) -> str:
+    """Map "auto" to "cuda" when a CUDA GPU is visible, otherwise "cpu"."""
+    device = (device or settings.DEVICE).strip().lower()
+    if device == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    if device.startswith("cuda") and not torch.cuda.is_available():
+        raise RuntimeError(f"DEVICE={device} but torch sees no CUDA GPU (CPU-only torch build?)")
+    return device
+
+
 class LocalHybridEmbedder:
     """Hybrid embedder combining BGE dense and SPLADE sparse vectors."""
 
-    def __init__(self, dense_model: str | None = None, sparse_model: str | None = None) -> None:
+    def __init__(
+        self,
+        dense_model: str | None = None,
+        sparse_model: str | None = None,
+        device: str | None = None,
+    ) -> None:
         """Initialize dense and sparse embedding models."""
         self.dense_model_name = dense_model or settings.DENSE_MODEL
         self.sparse_model_name = sparse_model or settings.SPARSE_MODEL
-        logger.info("Loading dense embedding model: %s", self.dense_model_name)
-        self.dense_model = SentenceTransformer(self.dense_model_name, device="cpu")
+        self.device = resolve_device(device)
+        logger.info("Loading dense embedding model: %s on %s", self.dense_model_name, self.device)
+        self.dense_model = SentenceTransformer(self.dense_model_name, device=self.device)
         self.dense_dim = self.dense_model.get_sentence_embedding_dimension()
         logger.info("Loading sparse embedding model: %s", self.sparse_model_name)
         self.sparse_tokenizer = AutoTokenizer.from_pretrained(self.sparse_model_name)
         self.sparse_model = AutoModelForMaskedLM.from_pretrained(
             self.sparse_model_name,
             torch_dtype=torch.float32,
-        )
+        ).to(self.device)
         self.sparse_model.eval()
 
     def token_offsets(self, text: str) -> list[tuple[int, int]]:
@@ -70,12 +86,12 @@ class LocalHybridEmbedder:
                 truncation=True,
                 max_length=MAX_SEQ_LEN,
                 return_tensors="pt",
-            )
+            ).to(self.device)
             with torch.no_grad():
                 logits = self.sparse_model(**inputs).logits
             activations = torch.log1p(torch.relu(logits))
             masked = activations * inputs["attention_mask"].unsqueeze(-1)
-            vecs = masked.max(dim=1).values
+            vecs = masked.max(dim=1).values.cpu()
             for row, i in enumerate(idx):
                 nz = torch.nonzero(vecs[row], as_tuple=True)[0]
                 out[i] = dict(zip(nz.tolist(), vecs[row, nz].tolist(), strict=True))
