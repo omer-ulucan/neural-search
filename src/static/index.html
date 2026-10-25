@@ -274,7 +274,21 @@
             margin-right: 10px;
         }
 
+        .source-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #d4d4d4;
+            margin-right: 8px;
+        }
+
+        .source-where {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #737373;
+        }
+
         .source-text {
+            margin-top: 6px;
             font-family: 'JetBrains Mono', monospace;
             font-size: 13px;
             line-height: 1.6;
@@ -428,7 +442,13 @@
             sources.forEach((source, index) => {
                 const card = document.createElement('div');
                 card.className = 'source-card';
-                card.innerHTML = `<span class="source-number">${index + 1}</span><span class="source-text">${escapeHtml(source)}</span>`;
+                const where = source.chunk_index === null || source.chunk_index === undefined
+                    ? source.source
+                    : `${source.source}, chunk ${source.chunk_index}`;
+                card.innerHTML = `<span class="source-number">${source.n ?? index + 1}</span>`
+                    + `<span class="source-title">${escapeHtml(source.title || 'Untitled')}</span>`
+                    + `<span class="source-where">${escapeHtml(where || '')}</span>`
+                    + `<span class="source-text">${escapeHtml(source.text || '')}</span>`;
                 card.addEventListener('click', () => {
                     const text = card.querySelector('.source-text');
                     text.classList.toggle('expanded');

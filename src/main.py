@@ -27,12 +27,23 @@ class SearchQuery(BaseModel):
     query: str
 
 
+class Source(BaseModel):
+    """A passage given to the LLM; `n` is the number the answer cites as [n]."""
+
+    n: int
+    title: str
+    source: str
+    chunk_index: int | None
+    text: str
+    score: float | None
+
+
 class SearchResponse(BaseModel):
     """Response model for the search endpoint."""
 
     answer: str
     routing: str
-    sources: list[str]
+    sources: list[Source]
 
 
 class RetrieveRequest(BaseModel):
@@ -184,7 +195,7 @@ def create_app(resource_factory: Callable[[], Resources] = load_resources) -> Fa
         return SearchResponse(
             answer=result["response"],
             routing=result["routing"],
-            sources=[d["text"] for d in result["documents"]],
+            sources=[Source(n=i + 1, **d) for i, d in enumerate(result["documents"])],
         )
 
     @app.post("/retrieve", response_model=RetrieveResponse)
