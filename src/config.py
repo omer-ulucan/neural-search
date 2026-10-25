@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     CANDIDATE_DEPTH: int = 50  # results fetched from each retriever before fusion
     DENSE_WEIGHT: float = 1.0
     SPARSE_WEIGHT: float = 1.0
+    DYNAMIC_WEIGHTS: bool = False  # query-dependent weights, see src/weighting.py
+    DYNAMIC_STRENGTH: float = 0.5
     N_CTX: int = 8192
     N_THREADS: int = 6
     N_GPU_LAYERS: int = 0
