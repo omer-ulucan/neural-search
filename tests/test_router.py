@@ -30,3 +30,15 @@ def test_strip_channel_markers():
         "The answer [1]."
     )
     assert strip_channel_markers("  plain  ") == "plain"
+
+
+def test_prompts_use_gemma4_turn_tokens_with_thinking_disabled():
+    from src.graph import router_prompt
+    from src.inference import STOP, build_rag_prompt
+
+    for prompt in (router_prompt("q"), build_rag_prompt("q", [{"title": "t", "text": "x"}])):
+        assert prompt.startswith("<|turn>user\n")
+        assert prompt.endswith("<turn|>\n<|turn>model\n<|channel>thought\n<channel|>")
+        assert "<start_of_turn>" not in prompt and "<end_of_turn>" not in prompt
+        assert "<bos>" not in prompt  # llama-cpp-python prepends BOS itself
+    assert "<turn|>" in STOP

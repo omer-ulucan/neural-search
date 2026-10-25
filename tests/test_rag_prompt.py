@@ -18,8 +18,10 @@ def test_prompt_grounds_the_answer_and_asks_for_citations():
     assert INSUFFICIENT_CONTEXT in prompt
     assert "[1] Install (install.md, chunk 0)\nUse pip." in prompt
     assert "[2] Untitled (https://x.example)\nWeb text." in prompt
-    assert prompt.startswith("<start_of_turn>user\n")
-    assert prompt.endswith("Question: How to install?\n<end_of_turn>\n<start_of_turn>model\n")
+    assert prompt.startswith("<|turn>user\n")
+    assert prompt.endswith(
+        "Question: How to install?<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"
+    )
 
 
 def test_no_documents_answers_insufficient_without_calling_the_llm(seeded_retriever):
