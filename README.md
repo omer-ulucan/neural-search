@@ -1,6 +1,6 @@
 # Local Hybrid Neural Search Engine
 
-A production-ready, fully-local hybrid neural search engine that combines dense embeddings (BGE), sparse lexical embeddings (SPLADE), and LLM-powered retrieval-augmented generation (RAG). Queries are automatically routed to a private Qdrant knowledge base or to the web via SearXNG using a LangGraph state machine.
+A fully-local hybrid neural search engine that combines dense embeddings (BGE), sparse lexical embeddings (SPLADE), and LLM-powered retrieval-augmented generation (RAG). Queries are automatically routed to a private Qdrant knowledge base or to the web via SearXNG using a LangGraph state machine.
 
 ## Architecture
 
@@ -55,7 +55,7 @@ A production-ready, fully-local hybrid neural search engine that combines dense 
 
 ```bash
 git clone <repo-url>
-cd neural-search-engine
+cd neural-search
 ```
 
 ### 2. Create and Activate Virtual Environment
@@ -80,7 +80,7 @@ pip install -r requirements.txt
 **Important:** The requirements include:
 - `numpy<2` (required for sentence-transformers compatibility)
 - `llama-cpp-python>=0.3.25` (for Gemma 4 architecture support)
-- `qdrant-client>=1.18.0` (for query_points API)
+- `qdrant-client==1.20.0` (matches the Qdrant v1.20.0 server image)
 - `hf_xet` (for faster HuggingFace downloads)
 
 ### 4. Download the Gemma 4 Model
@@ -102,10 +102,14 @@ This downloads the **Gemma 4 12B Instruct** model (Q4_K_M quantization, ~7GB).
 
 ### 5. Configure Environment Variables
 
-The `.env` file is automatically loaded by the application. Edit `.env` to set your model path:
+The `.env` file is automatically loaded by the application. Copy `.env.example` to `.env` and set your model path:
+
+```bash
+cp .env.example .env
+```
 
 ```env
-MODEL_PATH=C:\Users\your_username\path\to\neural-search-engine\models\gemma-4-12B-it-Q4_K_M.gguf
+MODEL_PATH=/absolute/path/to/neural-search/models/gemma-4-12B-it-Q4_K_M.gguf
 ```
 
 **Note:** `MODEL_PATH` must be an **absolute path** to the `.gguf` file.
@@ -117,7 +121,7 @@ docker compose up -d
 ```
 
 This starts:
-- **Qdrant v1.12.0** on `http://localhost:6333` (vector database)
+- **Qdrant v1.20.0** on `http://localhost:6333` (vector database)
 - **SearXNG** on `http://localhost:8080` (web search fallback)
 
 ### 7. Ingest Documents
@@ -220,8 +224,7 @@ pip install "numpy<2" --force-reinstall
 ### Qdrant Client/Server Version Mismatch
 
 If you see version mismatch warnings:
-- Ensure Qdrant Docker is v1.12.0 or higher
-- Ensure `qdrant-client>=1.18.0` is installed
+- Qdrant server and `qdrant-client` are pinned to the same minor version (1.20); keep them in sync
 
 ### SearXNG Web Search Fails
 
@@ -239,10 +242,10 @@ If you see `ModuleNotFoundError: No module named 'src'`:
 ## Project Structure
 
 ```
-neural-search-engine/
+neural-search/
 ├── docker-compose.yml          # Qdrant + SearXNG services
 ├── requirements.txt            # Pinned dependencies
-├── .env                        # Environment variables (auto-loaded)
+├── .env.example                # Template for .env (auto-loaded, gitignored)
 ├── .gitignore                  # Git ignore rules
 ├── README.md                   # This file
 ├── models/                     # GGUF model files
@@ -269,7 +272,7 @@ neural-search-engine/
 - **Smart Routing**: LLM-based router classifies queries as local or web
 - **Local Knowledge**: Search your private documents in Qdrant
 - **Web Fallback**: Automatic fallback to SearXNG for general knowledge
-- **Gemma 4 12B**: State-of-the-art open-source LLM with ChatML-style prompting
+- **Gemma 4 12B**: Open-weights LLM prompted with the Gemma chat template
 - **Dark Mode UI**: Clean, minimal interface with smooth animations
 - **Auto-Config**: `.env` file auto-loading, no manual exports needed
 - **Robust Ingestion**: Multi-encoding support, automatic path handling
