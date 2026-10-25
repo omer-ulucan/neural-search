@@ -6,6 +6,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -76,13 +77,15 @@ def create_app(resource_factory: Callable[[], Resources] = load_resources) -> Fa
         graph = request.app.state.resources.graph
         if graph is None:
             raise HTTPException(status_code=503, detail="No LLM configured (set MODEL_PATH)")
-        result = graph.invoke(
+        # The graph is synchronous (embedding, Qdrant, llama.cpp); keep it off the event loop.
+        result = await run_in_threadpool(
+            graph.invoke,
             {
                 "query": req.query,
                 "routing": "",
                 "documents": [],
                 "response": "",
-            }
+            },
         )
         return SearchResponse(
             answer=result["response"],
