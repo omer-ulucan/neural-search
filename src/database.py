@@ -6,48 +6,38 @@ from src.config import settings
 
 logger = logging.getLogger(__name__)
 
+DENSE_VECTOR = ""
+SPARSE_VECTOR = "lexical-sparse"
 
-def init_qdrant() -> QdrantClient:
+
+def init_qdrant(
+    client: QdrantClient | None = None,
+    collection: str | None = None,
+    dense_dim: int | None = None,
+) -> QdrantClient:
     """Initialize Qdrant client and create collection if it does not exist."""
-    client = QdrantClient(settings.QDRANT_HOST)
-    if not client.collection_exists(settings.COLLECTION_NAME):
+    client = client or QdrantClient(settings.QDRANT_HOST)
+    collection = collection or settings.COLLECTION_NAME
+    if not client.collection_exists(collection):
         client.create_collection(
-            collection_name=settings.COLLECTION_NAME,
+            collection_name=collection,
             vectors_config=models.VectorParams(
-                size=settings.DENSE_DIM,
+                size=dense_dim or settings.DENSE_DIM,
                 distance=models.Distance.COSINE,
             ),
             sparse_vectors_config={
-                "lexical-sparse": models.SparseVectorParams(),
+                SPARSE_VECTOR: models.SparseVectorParams(),
             },
         )
-        logger.info("Created Qdrant collection: %s", settings.COLLECTION_NAME)
+        client.create_payload_index(
+            collection, field_name="source", field_schema=models.PayloadSchemaType.KEYWORD
+        )
+        logger.info("Created Qdrant collection: %s", collection)
     else:
-        logger.info("Qdrant collection already exists: %s", settings.COLLECTION_NAME)
+        logger.info("Qdrant collection already exists: %s", collection)
     return client
 
 
-def insert_document(
-    client: QdrantClient,
-    doc_id: int,
-    text: str,
-    metadata: dict,
-    dense_vec: list[float],
-    sparse_vec: dict[int, float],
-) -> None:
-    """Upsert a single document with dense and sparse vectors into Qdrant."""
-    point = models.PointStruct(
-        id=doc_id,
-        vector={
-            "": dense_vec,
-            "lexical-sparse": models.SparseVector(
-                indices=list(sparse_vec.keys()),
-                values=list(sparse_vec.values()),
-            ),
-        },
-        payload={**metadata, "text": text},
-    )
-    client.upsert(
-        collection_name=settings.COLLECTION_NAME,
-        points=[point],
-    )
+def to_sparse_vector(sparse_vec: dict[int, float]) -> models.SparseVector:
+    """Convert an {index: weight} mapping into a Qdrant sparse vector."""
+    return models.SparseVector(indices=list(sparse_vec.keys()), values=list(sparse_vec.values()))

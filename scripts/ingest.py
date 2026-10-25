@@ -5,56 +5,55 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.database import init_qdrant, insert_document
-from src.embedder import LocalHybridEmbedder
+from src.config import settings  # noqa: E402
+from src.database import init_qdrant  # noqa: E402
+from src.embedder import LocalHybridEmbedder  # noqa: E402
+from src.ingestion import ingest_documents, read_documents  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 
-def _read_text_file(fpath: str) -> str:
-    """Read a text file trying utf-8, utf-8-sig, and latin-1 encodings."""
-    for enc in ("utf-8", "utf-8-sig", "latin-1"):
-        try:
-            with open(fpath, encoding=enc) as fh:
-                return fh.read()
-        except UnicodeDecodeError:
-            continue
-    raise UnicodeDecodeError(f"Could not decode {fpath} with any supported encoding")
-
-
 def main() -> None:
-    """Ingest .txt documents into the hybrid neural search engine."""
+    """Ingest .txt and .md documents into the hybrid neural search engine."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    parser = argparse.ArgumentParser(description="Ingest text documents into Qdrant")
+    parser = argparse.ArgumentParser(description="Ingest .txt/.md documents into Qdrant")
+    parser.add_argument("--docs-dir", required=True, help="Directory of .txt/.md files")
+    parser.add_argument("--collection", default=settings.COLLECTION_NAME)
+    parser.add_argument("--chunk-size", type=int, default=settings.CHUNK_SIZE, help="Tokens")
+    parser.add_argument("--chunk-overlap", type=int, default=settings.CHUNK_OVERLAP)
+    parser.add_argument("--batch-size", type=int, default=64, help="Chunks per upsert")
     parser.add_argument(
-        "--docs-dir", required=True, help="Directory containing .txt files to ingest"
+        "--no-prune",
+        action="store_true",
+        help="Keep chunks of documents that are no longer in --docs-dir",
     )
     args = parser.parse_args()
 
+    docs = read_documents(args.docs_dir)
     embedder = LocalHybridEmbedder()
-    client = init_qdrant()
-
-    doc_id = 0
-    for fname in sorted(os.listdir(args.docs_dir)):
-        if not fname.endswith(".txt"):
-            continue
-        fpath = os.path.join(args.docs_dir, fname)
-        text = _read_text_file(fpath)
-        logger.info("Processing %s (%d chars)", fname, len(text))
-        dense_vec = embedder.get_dense(text)
-        sparse_vec = embedder.get_sparse(text)
-        insert_document(
-            client=client,
-            doc_id=doc_id,
-            text=text,
-            metadata={"filename": fname},
-            dense_vec=dense_vec,
-            sparse_vec=sparse_vec,
-        )
-        logger.info("Inserted %s as doc_id=%d", fname, doc_id)
-        doc_id += 1
-
-    logger.info("Ingestion complete. Total documents: %d", doc_id)
+    client = init_qdrant(collection=args.collection, dense_dim=embedder.dense_dim)
+    stats = ingest_documents(
+        client,
+        args.collection,
+        docs,
+        embedder,
+        chunk_size=args.chunk_size,
+        chunk_overlap=args.chunk_overlap,
+        batch_size=args.batch_size,
+        prune=not args.no_prune,
+    )
+    logger.info(
+        "Ingestion complete: %d docs (%d embedded, %d unchanged, %d pruned), "
+        "%d chunks upserted, %d stale chunks deleted",
+        len(docs),
+        stats.embedded,
+        stats.unchanged,
+        stats.pruned,
+        stats.chunks_upserted,
+        stats.stale_chunks_deleted,
+    )
+    for source in stats.empty:
+        logger.warning("Skipped empty document: %s", source)
 
 
 if __name__ == "__main__":

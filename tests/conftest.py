@@ -20,9 +20,20 @@ class FakeEmbedder:
     """Deterministic bag-of-words embedder with the same interface as LocalHybridEmbedder."""
 
     dense_dim = FAKE_DIM
+    dense_model_name = "fake-dense"
+    sparse_model_name = "fake-sparse"
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+
+    def token_offsets(self, text: str) -> list[tuple[int, int]]:
+        return [m.span() for m in _WORD.finditer(text)]
+
+    def encode_dense(self, texts: list[str]) -> list[list[float]]:
+        return [self.get_dense(t) for t in texts]
+
+    def encode_sparse(self, texts: list[str]) -> list[dict[int, float]]:
+        return [self.get_sparse(t) for t in texts]
 
     def get_dense(self, text: str) -> list[float]:
         self.calls.append(text)
