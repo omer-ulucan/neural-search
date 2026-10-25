@@ -23,9 +23,19 @@ class Settings(BaseSettings):
     SPARSE_WEIGHT: float = 1.0
     DYNAMIC_WEIGHTS: bool = False  # query-dependent weights, see src/weighting.py
     DYNAMIC_STRENGTH: float = 0.5
+    # Comma-separated origins allowed to call the API from a browser (e.g. the live demo).
+    CORS_ORIGINS: str = (
+        "https://ulucan.dev,http://localhost:3000,http://localhost:5173,"
+        "http://localhost:8000,http://127.0.0.1:8000"
+    )
     N_CTX: int = 8192
     N_THREADS: int = 6
     N_GPU_LAYERS: int = 0
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """CORS_ORIGINS as a list, ignoring blanks."""
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
 
 settings = Settings()
