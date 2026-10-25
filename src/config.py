@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     DENSE_MODEL: str = "BAAI/bge-large-en-v1.5"
     SPARSE_MODEL: str = "naver/splade-cocondenser-ensembledistil"
     DENSE_DIM: int = 1024
+    DEVICE: str = "auto"  # embedding device: auto (CUDA if available), cpu, cuda, cuda:1, ...
     CHUNK_SIZE: int = 320  # tokens, below the 512-token limit of BGE and SPLADE
     CHUNK_OVERLAP: int = 48  # tokens, 15% of CHUNK_SIZE
     EMBED_BATCH_SIZE: int = 16
