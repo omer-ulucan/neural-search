@@ -4,48 +4,82 @@ import torch
 from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
+from src.config import settings
+
 logger = logging.getLogger(__name__)
+
+MAX_SEQ_LEN = 512
 
 
 class LocalHybridEmbedder:
     """Hybrid embedder combining BGE dense and SPLADE sparse vectors."""
 
-    def __init__(self) -> None:
+    def __init__(self, dense_model: str | None = None, sparse_model: str | None = None) -> None:
         """Initialize dense and sparse embedding models."""
-        logger.info("Loading dense embedding model: BAAI/bge-large-en-v1.5")
-        self.dense_model = SentenceTransformer("BAAI/bge-large-en-v1.5", device="cpu")
-        logger.info("Loading sparse embedding model: naver/splade-cocondenser-ensembledistil")
-        self.sparse_tokenizer = AutoTokenizer.from_pretrained(
-            "naver/splade-cocondenser-ensembledistil"
-        )
+        self.dense_model_name = dense_model or settings.DENSE_MODEL
+        self.sparse_model_name = sparse_model or settings.SPARSE_MODEL
+        logger.info("Loading dense embedding model: %s", self.dense_model_name)
+        self.dense_model = SentenceTransformer(self.dense_model_name, device="cpu")
+        self.dense_dim = self.dense_model.get_sentence_embedding_dimension()
+        logger.info("Loading sparse embedding model: %s", self.sparse_model_name)
+        self.sparse_tokenizer = AutoTokenizer.from_pretrained(self.sparse_model_name)
         self.sparse_model = AutoModelForMaskedLM.from_pretrained(
-            "naver/splade-cocondenser-ensembledistil",
+            self.sparse_model_name,
             torch_dtype=torch.float32,
         )
         self.sparse_model.eval()
 
+    def token_offsets(self, text: str) -> list[tuple[int, int]]:
+        """Return character offsets of the dense tokenizer's tokens, used for chunking."""
+        enc = self.dense_model.tokenizer(
+            text, add_special_tokens=False, return_offsets_mapping=True, verbose=False
+        )
+        return [tuple(o) for o in enc["offset_mapping"]]
+
     def get_dense(self, text: str) -> list[float]:
         """Encode text into a dense vector using BGE with L2 normalization."""
-        embedding = self.dense_model.encode(text, normalize_embeddings=True)
-        return embedding.tolist()
+        return self.encode_dense([text])[0]
+
+    def encode_dense(self, texts: list[str], batch_size: int | None = None) -> list[list[float]]:
+        """Encode a batch of texts into L2-normalized BGE vectors."""
+        embeddings = self.dense_model.encode(
+            texts,
+            batch_size=batch_size or settings.EMBED_BATCH_SIZE,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return embeddings.tolist()
 
     def get_sparse(self, text: str) -> dict[int, float]:
         """Extract a SPLADE log-relu sparse vector with nonzero filtering."""
-        inputs = self.sparse_tokenizer(
-            text,
-            padding=True,
-            truncation=True,
-            max_length=512,
-            return_tensors="pt",
-        )
-        with torch.no_grad():
-            output = self.sparse_model(**inputs)
-        activations = torch.log(1 + torch.relu(output.logits))
-        attention_mask = inputs["attention_mask"]
-        masked = activations * attention_mask.unsqueeze(-1)
-        vec = masked.max(dim=1).values.squeeze()
-        nonzero = torch.nonzero(vec, as_tuple=False)
-        result = {int(idx): float(vec[idx]) for idx in nonzero.flatten()}
+        result = self.encode_sparse([text])[0]
         if not result:
             raise ValueError("SPLADE produced empty sparse vector")
         return result
+
+    def encode_sparse(
+        self, texts: list[str], batch_size: int | None = None
+    ) -> list[dict[int, float]]:
+        """Encode a batch of texts into SPLADE vectors. A vector may be empty."""
+        batch_size = batch_size or settings.EMBED_BATCH_SIZE
+        # Sorting by length keeps padding, and therefore wasted compute, low.
+        order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
+        out: list[dict[int, float]] = [{} for _ in texts]
+        for b in range(0, len(order), batch_size):
+            idx = order[b : b + batch_size]
+            inputs = self.sparse_tokenizer(
+                [texts[i] for i in idx],
+                padding=True,
+                truncation=True,
+                max_length=MAX_SEQ_LEN,
+                return_tensors="pt",
+            )
+            with torch.no_grad():
+                logits = self.sparse_model(**inputs).logits
+            activations = torch.log1p(torch.relu(logits))
+            masked = activations * inputs["attention_mask"].unsqueeze(-1)
+            vecs = masked.max(dim=1).values
+            for row, i in enumerate(idx):
+                nz = torch.nonzero(vecs[row], as_tuple=True)[0]
+                out[i] = dict(zip(nz.tolist(), vecs[row, nz].tolist(), strict=True))
+        return out
