@@ -43,7 +43,7 @@ def test_search_runs_the_graph(client_factory):
     with client_factory(FakeLLM(["local", "Use pip [1]."])) as c:
         body = c.post("/search", json={"query": "pip install"}).json()
     assert body["answer"] == "Use pip [1]." and body["routing"] == "local"
-    assert any("pip install" in s for s in body["sources"])
+    assert any("pip install" in s["text"] for s in body["sources"])
 
 
 def test_search_without_llm_returns_503(client_factory):
