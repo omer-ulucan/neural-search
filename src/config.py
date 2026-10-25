@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     QDRANT_HOST: str = "http://localhost:6333"
     COLLECTION_NAME: str = "technical_docs"
-    MODEL_PATH: str  # must be set via env var MODEL_PATH or .env file
+    MODEL_PATH: str = ""  # GGUF path; required for /search, not for /retrieve, eval or bench
     SEARXNG_HOST: str = "http://localhost:8080"
     DENSE_MODEL: str = "BAAI/bge-large-en-v1.5"
     SPARSE_MODEL: str = "naver/splade-cocondenser-ensembledistil"
