@@ -1,5 +1,6 @@
 import logging
 import re
+import threading
 
 from src.config import settings
 
@@ -37,6 +38,8 @@ class LocalLLM:
             raise ValueError("MODEL_PATH is not set; point it at a GGUF file")
         logger.info("Loading LLM from: %s", model_path)
         self.model_path = model_path
+        # A llama.cpp context is not thread-safe; concurrent requests must take turns.
+        self._lock = threading.Lock()
         self.llm = Llama(
             model_path=model_path,
             n_ctx=settings.N_CTX,
@@ -52,12 +55,13 @@ class LocalLLM:
     def generate(self, prompt: str, temperature: float = 0.2, max_tokens: int = 1024) -> str:
         """Generate text from the LLM with stop sequences and error handling."""
         try:
-            output = self.llm(
-                prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stop=["<end_of_turn>", "<start_of_turn>"],
-            )
+            with self._lock:
+                output = self.llm(
+                    prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stop=["<end_of_turn>", "<start_of_turn>"],
+                )
         except Exception:
             logger.exception("LLM generation failed")
             raise

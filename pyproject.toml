@@ -14,4 +14,8 @@ select = ["E", "F", "W", "I", "B", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-filterwarnings = ["ignore:Payload indexes have no effect in the local Qdrant"]
+filterwarnings = [
+    "ignore:Payload indexes have no effect in the local Qdrant",
+    "ignore::DeprecationWarning:starlette.*",
+    "ignore:Please use `import python_multipart`:PendingDeprecationWarning",
+]
