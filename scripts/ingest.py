@@ -15,7 +15,7 @@ def _read_text_file(fpath: str) -> str:
     """Read a text file trying utf-8, utf-8-sig, and latin-1 encodings."""
     for enc in ("utf-8", "utf-8-sig", "latin-1"):
         try:
-            with open(fpath, "r", encoding=enc) as fh:
+            with open(fpath, encoding=enc) as fh:
                 return fh.read()
         except UnicodeDecodeError:
             continue
@@ -26,7 +26,9 @@ def main() -> None:
     """Ingest .txt documents into the hybrid neural search engine."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="Ingest text documents into Qdrant")
-    parser.add_argument("--docs-dir", required=True, help="Directory containing .txt files to ingest")
+    parser.add_argument(
+        "--docs-dir", required=True, help="Directory containing .txt files to ingest"
+    )
     args = parser.parse_args()
 
     embedder = LocalHybridEmbedder()

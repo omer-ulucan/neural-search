@@ -23,9 +23,7 @@ class LocalLLM:
 
     def build_rag_prompt(self, query: str, contexts: list[str]) -> str:
         """Build a Gemma 4 chat prompt with numbered context injection."""
-        context_block = "\n\n".join(
-            f"[{i + 1}] {ctx}" for i, ctx in enumerate(contexts)
-        )
+        context_block = "\n\n".join(f"[{i + 1}] {ctx}" for i, ctx in enumerate(contexts))
         prompt = (
             f"<start_of_turn>user\n"
             f"Context:\n{context_block}\n\n"
@@ -34,7 +32,6 @@ class LocalLLM:
             f"<start_of_turn>model\n"
         )
         return prompt
-
 
     def generate(self, prompt: str, temperature: float = 0.2, max_tokens: int = 1024) -> str:
         """Generate text from the LLM with stop sequences and error handling."""
@@ -48,9 +45,9 @@ class LocalLLM:
             text = output["choices"][0]["text"]
             # Strip Gemma 4 channel markers (e.g., <|channel>thought\n<channel|>)
             import re
-            text = re.sub(r'<\|channel\>.*?<channel\|>', '', text, flags=re.DOTALL)
+
+            text = re.sub(r"<\|channel\>.*?<channel\|>", "", text, flags=re.DOTALL)
             return text.strip()
-        except Exception as exc:
+        except Exception:
             logger.exception("LLM generation failed")
             raise
-
