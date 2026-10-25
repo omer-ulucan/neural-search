@@ -31,8 +31,10 @@ def router_node(state: AgentState) -> AgentState:
     prompt = (
         f"<start_of_turn>user\n"
         f"You are a routing assistant. Respond with ONLY the single word 'local' or 'web'.\n"
-        f"local = queries about proprietary/internal code, architecture, or docs in a private knowledge base.\n"
-        f"web = queries about open-source frameworks, current events, error messages, general technical knowledge.\n\n"
+        "local = queries about proprietary/internal code, architecture, or docs in a "
+        "private knowledge base.\n"
+        "web = queries about open-source frameworks, current events, error messages, "
+        "general technical knowledge.\n\n"
         f"Query: {state['query']}\n"
         f"<end_of_turn>\n"
         f"<start_of_turn>model\n"

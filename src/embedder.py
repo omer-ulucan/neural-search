@@ -15,7 +15,9 @@ class LocalHybridEmbedder:
         logger.info("Loading dense embedding model: BAAI/bge-large-en-v1.5")
         self.dense_model = SentenceTransformer("BAAI/bge-large-en-v1.5", device="cpu")
         logger.info("Loading sparse embedding model: naver/splade-cocondenser-ensembledistil")
-        self.sparse_tokenizer = AutoTokenizer.from_pretrained("naver/splade-cocondenser-ensembledistil")
+        self.sparse_tokenizer = AutoTokenizer.from_pretrained(
+            "naver/splade-cocondenser-ensembledistil"
+        )
         self.sparse_model = AutoModelForMaskedLM.from_pretrained(
             "naver/splade-cocondenser-ensembledistil",
             torch_dtype=torch.float32,
@@ -47,4 +49,3 @@ class LocalHybridEmbedder:
         if not result:
             raise ValueError("SPLADE produced empty sparse vector")
         return result
-
