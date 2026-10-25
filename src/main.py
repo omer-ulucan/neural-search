@@ -45,10 +45,12 @@ def load_resources() -> Resources:
     from src.database import init_qdrant
     from src.embedder import LocalHybridEmbedder
     from src.inference import LocalLLM
+    from src.weighting import QueryWeighting
 
     embedder = LocalHybridEmbedder()
     client = init_qdrant(dense_dim=embedder.dense_dim)
-    retriever = Retriever(client, embedder)
+    weighting = QueryWeighting(settings.DYNAMIC_STRENGTH) if settings.DYNAMIC_WEIGHTS else None
+    retriever = Retriever(client, embedder, weighting=weighting)
     if not settings.MODEL_PATH:
         logger.warning("MODEL_PATH not set: /search is disabled, /retrieve still works")
         return Resources(retriever=retriever)
