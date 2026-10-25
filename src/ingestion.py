@@ -159,6 +159,9 @@ def ingest_documents(
         client.upsert(collection, points=pending, wait=True)
         stats.chunks_upserted += len(pending)
         pending.clear()
+        logger.info(
+            "Upserted %d chunks (%d documents embedded)", stats.chunks_upserted, stats.embedded
+        )
 
     for doc in docs:
         fp = fingerprint(doc, config)
@@ -186,7 +189,7 @@ def ingest_documents(
             pending.append(models.PointStruct(id=pid, vector={}, payload=payload))
             if len(pending) >= batch_size:
                 flush()
-        logger.info("Queued %s (%d chunks)", doc.source, len(chunks))
+        logger.debug("Queued %s (%d chunks)", doc.source, len(chunks))
     flush()
 
     if prune:
