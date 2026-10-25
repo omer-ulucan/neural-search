@@ -8,6 +8,25 @@ logger = logging.getLogger(__name__)
 
 _CHANNEL_MARKERS = re.compile(r"<\|channel\>.*?<channel\|>", flags=re.DOTALL)
 
+# Gemma 4 control tokens (ids 105 and 106 in the GGUF vocab). Gemma 3's <start_of_turn> and
+# <end_of_turn> are not special tokens in Gemma 4 and would reach the model as plain text.
+TURN_START = "<|turn>"
+TURN_END = "<turn|>"
+# An empty thought block after the model header disables thinking, as the GGUF's chat
+# template does for enable_thinking=false. Otherwise the model opens a thought channel
+# first and a short max_tokens budget (the router uses 10) runs out before the answer.
+NO_THINKING = "<|channel>thought\n<channel|>"
+STOP = [TURN_END, TURN_START]
+
+
+def gemma_prompt(user_content: str) -> str:
+    """Wrap one user message in the Gemma 4 chat format, with thinking disabled.
+
+    No <bos>: llama-cpp-python prepends it itself (the GGUF sets add_bos_token), and a
+    second one degrades output.
+    """
+    return f"{TURN_START}user\n{user_content.strip()}{TURN_END}\n{TURN_START}model\n{NO_THINKING}"
+
 
 def strip_channel_markers(text: str) -> str:
     """Remove Gemma 4 thinking-channel blocks, e.g. <|channel>thought ...<channel|>."""
@@ -37,14 +56,7 @@ def format_context(n: int, doc: dict) -> str:
 def build_rag_prompt(query: str, contexts: list[dict]) -> str:
     """Build a Gemma 4 chat prompt with grounding rules and numbered, attributed passages."""
     context_block = "\n\n".join(format_context(i + 1, d) for i, d in enumerate(contexts))
-    return (
-        f"<start_of_turn>user\n"
-        f"{RAG_INSTRUCTIONS}\n"
-        f"Context:\n{context_block}\n\n"
-        f"Question: {query}\n"
-        f"<end_of_turn>\n"
-        f"<start_of_turn>model\n"
-    )
+    return gemma_prompt(f"{RAG_INSTRUCTIONS}\nContext:\n{context_block}\n\nQuestion: {query}")
 
 
 class LocalLLM:
@@ -81,7 +93,7 @@ class LocalLLM:
                     prompt,
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    stop=["<end_of_turn>", "<start_of_turn>"],
+                    stop=STOP,
                 )
         except Exception:
             logger.exception("LLM generation failed")

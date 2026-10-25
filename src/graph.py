@@ -7,7 +7,7 @@ import requests
 from langgraph.graph import END, StateGraph
 
 from src.config import settings
-from src.inference import INSUFFICIENT_CONTEXT, build_rag_prompt
+from src.inference import INSUFFICIENT_CONTEXT, build_rag_prompt, gemma_prompt
 from src.retrieval import Retriever
 
 logger = logging.getLogger(__name__)
@@ -25,17 +25,14 @@ class AgentState(TypedDict):
 
 
 def router_prompt(query: str) -> str:
-    """Build the Gemma chat prompt that asks the LLM for a single routing word."""
-    return (
-        f"<start_of_turn>user\n"
-        f"You are a routing assistant. Respond with ONLY the single word 'local' or 'web'.\n"
+    """Build the Gemma 4 prompt that asks the LLM for a single routing word."""
+    return gemma_prompt(
+        "You are a routing assistant. Respond with ONLY the single word 'local' or 'web'.\n"
         "local = queries about proprietary/internal code, architecture, or docs in a "
         "private knowledge base.\n"
         "web = queries about open-source frameworks, current events, error messages, "
         "general technical knowledge.\n\n"
-        f"Query: {query}\n"
-        f"<end_of_turn>\n"
-        f"<start_of_turn>model\n"
+        f"Query: {query}"
     )
 
 
