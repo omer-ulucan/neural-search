@@ -1,1 +1,1 @@
-# neural-search-engine package
+# neural-search package
