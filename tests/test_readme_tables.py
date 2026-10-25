@@ -116,6 +116,9 @@ def test_committed_readme_matches_results_files():
     assert mod.update(readme) == readme, "run python scripts/make_readme_tables.py"
 
 
+EM_DASH = chr(0x2014)  # built at runtime so this file does not contain one
+
+
 def test_no_em_dashes_in_tracked_text_files():
     files = subprocess.run(
         ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
@@ -126,6 +129,6 @@ def test_no_em_dashes_in_tracked_text_files():
         for f in files
         if Path(f).suffix in suffixes
         and (ROOT / f).exists()
-        and "—" in (ROOT / f).read_text(encoding="utf-8", errors="ignore")
+        and EM_DASH in (ROOT / f).read_text(encoding="utf-8", errors="ignore")
     ]
     assert offenders == []
