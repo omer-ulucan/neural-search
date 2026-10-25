@@ -80,6 +80,23 @@ python scripts/bench.py --model-path models/gemma-4-12B-it-Q4_0.gguf   # writes 
 python scripts/make_readme_tables.py                 # regenerates the tables above
 ```
 
+### On an NVIDIA GPU
+
+Embedding uses CUDA automatically (`DEVICE=auto`) and the LLM offloads with `N_GPU_LAYERS=-1`, but both need CUDA builds of their libraries; the default Windows wheels are CPU-only.
+
+```bash
+# torch: the Linux default wheel already includes CUDA 12.1; on Windows install it explicitly
+pip install torch==2.3.0 --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements-dev.txt
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+
+# llama-cpp-python with CUDA (needs the CUDA toolkit; on Windows also VS Build Tools)
+CMAKE_ARGS="-DGGML_CUDA=on" pip install --force-reinstall --no-cache-dir "llama-cpp-python>=0.3.25"
+# PowerShell: $env:CMAKE_ARGS="-DGGML_CUDA=on"; pip install --force-reinstall --no-cache-dir "llama-cpp-python>=0.3.25"
+```
+
+Then run eval and bench as above with `N_GPU_LAYERS=-1` in `.env`. On a 12 GB card, Gemma 4 12B Q4_0 (7.2 GB), its KV cache at `--e2e-n-ctx 4096`, and BGE-large plus SPLADE (about 2 GB) fit together. The bench records the GPU name, so latency from different machines is never mixed up.
+
 `--subforums` accepts any CQADupStack subforum (for example `unix programmers webmasters`); results are averaged across them and every selection uses the mean dev score. Indexing is resumable: an interrupted run picks up where it stopped. On a CPU-only laptop, embedding the 17k-document webmasters corpus with BGE-large takes several hours.
 
 ## Setup
