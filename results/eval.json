@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-26T04:36:07+00:00",
+  "generated_at": "2026-10-26T04:40:36+00:00",
   "git": {
-    "commit": "ff8a8da5b8e77b4e553df634be996dd10c9b24f7",
+    "commit": "1dd80f004cd211f506ebfec3323c144da8578152",
     "dirty": false
   },
   "command": [
@@ -128,10 +128,10 @@
         "chunk_size": 320,
         "chunk_overlap": 48,
         "last_ingest": {
-          "seconds": 50.5,
-          "embedded": 97,
-          "unchanged": 17308,
-          "chunks_upserted": 741,
+          "seconds": 7.5,
+          "embedded": 0,
+          "unchanged": 17405,
+          "chunks_upserted": 0,
           "stale_chunks_deleted": 0
         }
       },
