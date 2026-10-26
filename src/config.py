@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     QDRANT_HOST: str = "http://localhost:6333"
+    QDRANT_TIMEOUT: int = 60  # seconds; the client default of 5 s times out bulk upserts
     COLLECTION_NAME: str = "technical_docs"
     MODEL_PATH: str = ""  # GGUF path; required for /search, not for /retrieve, eval or bench
     SEARXNG_HOST: str = "http://localhost:8080"
