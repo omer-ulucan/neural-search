@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from src.config import settings
 from src.main import Resources, create_app, snippet
 
 
@@ -13,7 +14,7 @@ def client(seeded_retriever):
 
 def test_retrieve_returns_sparse_dense_and_fused_side_by_side(client):
     body = client.post("/retrieve", json={"query": "rank fusion dense", "top_k": 2}).json()
-    assert body["top_k"] == 2 and body["rrf_k"] == 60
+    assert body["top_k"] == 2 and body["rrf_k"] == settings.RRF_K
     assert body["weights"] == {"dense": 1.0, "sparse": 1.0, "reasons": []}
     for key in ("sparse", "dense", "fused"):
         assert 1 <= len(body[key]) <= 2

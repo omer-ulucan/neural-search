@@ -8,6 +8,14 @@ import pytest
 
 os.environ.setdefault("MODEL_PATH", "/nonexistent/model.gguf")
 
+from src.config import Settings, settings  # noqa: E402
+
+# Defaults plus explicit environment variables only, so a developer's .env cannot change
+# what the tests check.
+_isolated = Settings(_env_file=None)
+for _name in Settings.model_fields:
+    setattr(settings, _name, getattr(_isolated, _name))
+
 FAKE_DIM = 16
 _WORD = re.compile(r"\w+")
 
