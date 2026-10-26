@@ -18,13 +18,13 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 320  # tokens, below the 512-token limit of BGE and SPLADE
     CHUNK_OVERLAP: int = 48  # tokens, 15% of CHUNK_SIZE
     EMBED_BATCH_SIZE: int = 16
-    RRF_K: int = 60  # RRF smoothing constant, unrelated to how many results are returned
+    RRF_K: int = 10  # RRF smoothing constant (dev-selected), independent of TOP_K
     TOP_K: int = 5  # results returned (and passed to the LLM as context)
     CANDIDATE_DEPTH: int = 50  # results fetched from each retriever before fusion
     DENSE_WEIGHT: float = 1.0
     SPARSE_WEIGHT: float = 1.0
-    DYNAMIC_WEIGHTS: bool = False  # query-dependent weights, see src/weighting.py
-    DYNAMIC_STRENGTH: float = 0.5
+    DYNAMIC_WEIGHTS: bool = True  # query-dependent weights, see src/weighting.py
+    DYNAMIC_STRENGTH: float = 0.25  # dev-selected with RRF_K, see results/eval.json
     # Comma-separated origins allowed to call the API from a browser (e.g. the live demo).
     CORS_ORIGINS: str = (
         "https://ulucan.dev,http://localhost:3000,http://localhost:5173,"
