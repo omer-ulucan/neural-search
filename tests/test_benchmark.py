@@ -111,3 +111,20 @@ def test_gpu_load_is_none_without_nvidia_smi(monkeypatch):
     monkeypatch.setattr(benchmark.subprocess, "run", missing)
     assert benchmark.gpu_load() is None
     assert benchmark.background_load()["gpu"] is None
+
+
+@pytest.mark.parametrize(
+    ("system", "release", "version", "expected"),
+    [
+        ("Windows", "10", "10.0.26300", "Windows 11 (10.0.26300)"),
+        ("Windows", "10", "10.0.19045", "Windows 10 (10.0.19045)"),
+        ("Linux", "6.8.0", "#1 SMP", "Linux 6.8.0 (#1 SMP)"),
+    ],
+)
+def test_os_name_tells_windows_11_from_10(monkeypatch, system, release, version, expected):
+    from src import benchmark
+
+    monkeypatch.setattr(benchmark.platform, "system", lambda: system)
+    monkeypatch.setattr(benchmark.platform, "release", lambda: release)
+    monkeypatch.setattr(benchmark.platform, "version", lambda: version)
+    assert benchmark.os_name() == expected
