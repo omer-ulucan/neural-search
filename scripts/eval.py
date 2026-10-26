@@ -264,8 +264,7 @@ def main() -> None:
     p.add_argument("--index-only", action="store_true", help="Only build and verify indexes")
     args = p.parse_args()
 
-    from qdrant_client import QdrantClient
-
+    from src.database import qdrant_client
     from src.embedder import LocalHybridEmbedder
 
     started = dt.datetime.now(dt.UTC)
@@ -273,7 +272,7 @@ def main() -> None:
     if git["dirty"]:
         logger.warning("Working tree is dirty; results will be marked dirty")
     embedder = LocalHybridEmbedder()
-    client = QdrantClient(settings.QDRANT_HOST)
+    client = qdrant_client()
 
     subs = {}
     for sub in args.subforums:
