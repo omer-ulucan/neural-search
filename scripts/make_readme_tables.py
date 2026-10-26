@@ -18,7 +18,7 @@ LABELS = {
     "bm25": "BM25 baseline (bm25s)",
     "splade": "SPLADE only",
     "dense": "Dense only (BGE-large)",
-    "hybrid_static_equal_default_k": "Hybrid RRF, equal weights, k=60 (default)",
+    "hybrid_static_equal_default_k": "Hybrid RRF, equal weights, k=60 (common default)",
     "hybrid_static_equal_best_k": "Hybrid RRF, equal weights, dev-selected k",
     "hybrid_static_tuned": "Hybrid RRF, dev-tuned static weights",
     "hybrid_dynamic_tuned": "Hybrid RRF, dynamic weights (dev-tuned)",
@@ -74,7 +74,7 @@ def eval_tables(ev: dict) -> str:
         "| test | " + " | ".join(fmt(sweep["test"][k]["nDCG@10"]) for k in ks) + " |",
     ]
     d = ev["dynamic_weights_decision"]
-    verdict = "kept" if d["keep"] else "not kept (off by default)"
+    verdict = "kept (on by default)" if d["keep"] else "not kept (off by default)"
     boot = "; ".join(
         f"{s}: test delta {b['mean_delta']:+.3f}, "
         f"95% CI [{b['ci95_low']:+.3f}, {b['ci95_high']:+.3f}]"
@@ -83,7 +83,7 @@ def eval_tables(ev: dict) -> str:
     git = ev["git"]
     lines += [
         "",
-        f"Dynamic weights vs equal weights: dev nDCG@10 delta {d['dev_delta']:+.3f}, "
+        f"Dynamic weights vs equal weights: dev nDCG@10 delta {d['dev_delta']:+.5f}, "
         f"so dynamic weighting is **{verdict}** ({boot}).",
         "",
         f"Models: `{ev['models']['dense']}` and `{ev['models']['sparse']}`. "
@@ -95,6 +95,25 @@ def eval_tables(ev: dict) -> str:
 
 def pct_row(label: str, s: dict) -> str:
     return f"| {label} | {s['p50']:.1f} | {s['p95']:.1f} | {s['p99']:.1f} | {s['n']} |"
+
+
+def load_note(b: dict) -> str:
+    """Other processes' load, which inflates every latency below when it is not near zero."""
+    bg = b.get("background_load")
+    if not bg:
+        return ""
+
+    def one(x: dict) -> str:
+        gpu = x["gpu"]
+        busy = (
+            f", GPU {gpu['utilization_pct']:.0f}% ({gpu['memory_used_mb']:.0f} MB)" if gpu else ""
+        )
+        return f"CPU {x['cpu_busy_pct']:.0f}%{busy}"
+
+    return (
+        f" Load from other processes, sampled while the benchmark held no models: "
+        f"before {one(bg['before'])}; after {one(bg['after'])}."
+    )
 
 
 def bench_tables(b: dict) -> str:
@@ -112,10 +131,11 @@ def bench_tables(b: dict) -> str:
         f"torch threads {hw['torch_threads']}, GPU: {hw['gpu']}, {hw['ram_gb']} GB RAM. "
         f"Qdrant {b['qdrant_server']} in Docker on the same machine. "
         f"Corpus verified before timing: {b['corpus']['index']['distinct_sources']} documents, "
-        f"{b['corpus']['index']['points']} chunks.",
+        f"{b['corpus']['index']['points']} chunks.{load_note(b)}",
         "",
         f"Retrieval only, in process ({rp['queries']} queries, {rp['warmup_excluded']} warmup "
-        f"excluded, top_k={rp['top_k']}, includes {', '.join(rp['includes'])}; "
+        f"excluded, top_k={rp['top_k']}, rrf_k={rp['rrf_k']}, dynamic weights "
+        f"{'on' if rp['dynamic_weights'] else 'off'}, includes {', '.join(rp['includes'])}; "
         f"excludes {', '.join(rp['excludes'])}):",
         "",
         "| Stage | p50 ms | p95 ms | p99 ms | n |",
