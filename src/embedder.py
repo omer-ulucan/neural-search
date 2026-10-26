@@ -11,6 +11,16 @@ logger = logging.getLogger(__name__)
 MAX_SEQ_LEN = 512
 
 
+def splade_pool(logits: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    """max over tokens of log(1 + relu(logits)), ignoring padding. Overwrites logits.
+
+    log1p and relu are non-decreasing, so pooling the raw logits first gives exactly the
+    same values while allocating only batch x vocab instead of batch x tokens x vocab.
+    """
+    logits.masked_fill_(attention_mask.unsqueeze(-1) == 0, float("-inf"))
+    return torch.log1p(torch.relu(logits.max(dim=1).values))
+
+
 def resolve_device(device: str | None = None) -> str:
     """Map "auto" to "cuda" when a CUDA GPU is visible, otherwise "cpu"."""
     device = (device or settings.DEVICE).strip().lower()
@@ -89,9 +99,8 @@ class LocalHybridEmbedder:
             ).to(self.device)
             with torch.no_grad():
                 logits = self.sparse_model(**inputs).logits
-            activations = torch.log1p(torch.relu(logits))
-            masked = activations * inputs["attention_mask"].unsqueeze(-1)
-            vecs = masked.max(dim=1).values.cpu()
+                vecs = splade_pool(logits, inputs["attention_mask"]).cpu()
+                del logits
             for row, i in enumerate(idx):
                 nz = torch.nonzero(vecs[row], as_tuple=True)[0]
                 out[i] = dict(zip(nz.tolist(), vecs[row, nz].tolist(), strict=True))
