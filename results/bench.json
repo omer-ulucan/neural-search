@@ -1,0 +1,459 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-26T08:55:26+00:00",
+  "git": {
+    "commit": "21b509401bd93c72304103bde1cba1e7ed09160c",
+    "dirty": false
+  },
+  "command": [
+    "python",
+    "scripts/bench.py",
+    "--model-path",
+    "models/gemma-4-12B-it-Q4_0.gguf",
+    "--e2e-concurrency",
+    "1",
+    "5"
+  ],
+  "config": {
+    "subforum": "webmasters",
+    "revision": null,
+    "collection": "eval_cqadupstack_webmasters",
+    "dataset_dir": null,
+    "top_k": 10,
+    "warmup": 20,
+    "queries": 0,
+    "min_queries": 400,
+    "concurrency": [
+      1,
+      5,
+      20,
+      50
+    ],
+    "http_requests": 300,
+    "model_path": "models/gemma-4-12B-it-Q4_0.gguf",
+    "e2e_queries": 20,
+    "e2e_warmup": 1,
+    "e2e_concurrency": [
+      1,
+      5
+    ],
+    "e2e_n_ctx": 4096,
+    "skip_http": false,
+    "skip_e2e": false
+  },
+  "hardware": {
+    "cpu": "13th Gen Intel(R) Core(TM) i7-13700HX",
+    "physical_cores": 16,
+    "logical_cores": 24,
+    "torch_threads": 16,
+    "gpu": "NVIDIA GeForce RTX 4080 Laptop GPU",
+    "ram_gb": 15.7,
+    "os": "Windows 11 (10.0.26300)",
+    "python": "3.11.15"
+  },
+  "qdrant_server": "1.20.0",
+  "corpus": {
+    "dataset": "BEIR CQADupStack webmasters",
+    "revision": "c691d4af16c19a79df7ee93bfbd12cc186a5bc92",
+    "corpus_documents": 17405,
+    "index": {
+      "collection": "eval_cqadupstack_webmasters",
+      "points": 20069,
+      "distinct_sources": 17405,
+      "dense_size": 1024,
+      "dense_distance": "Cosine",
+      "sparse_vectors": [
+        "lexical-sparse"
+      ],
+      "status": "green"
+    },
+    "verification": {
+      "documents": {
+        "found": 17405,
+        "expected": 17405
+      },
+      "chunks": {
+        "found": 20069,
+        "expected": 20069
+      },
+      "dense_dim": {
+        "found": 1024,
+        "expected": 1024
+      }
+    },
+    "chunk_size": 320,
+    "chunk_overlap": 48,
+    "models": {
+      "dense": "BAAI/bge-large-en-v1.5",
+      "dense_dim": 1024,
+      "sparse": "naver/splade-cocondenser-ensembledistil"
+    }
+  },
+  "retrieval_in_process": {
+    "includes": [
+      "dense encode",
+      "sparse encode",
+      "Qdrant query",
+      "RRF fusion"
+    ],
+    "excludes": [
+      "HTTP/JSON",
+      "network",
+      "LLM router",
+      "LLM generation"
+    ],
+    "queries": 486,
+    "warmup_excluded": 20,
+    "mode": "hybrid",
+    "top_k": 10,
+    "candidate_depth": 50,
+    "rrf_k": 10,
+    "dynamic_weights": true,
+    "sparse_fallback_queries": 0,
+    "stages_ms": {
+      "dense_encode": {
+        "p50": 19.48,
+        "p95": 28.96,
+        "p99": 39.45,
+        "n": 486,
+        "mean": 21.29,
+        "max": 54.75
+      },
+      "sparse_encode": {
+        "p50": 9.22,
+        "p95": 15.94,
+        "p99": 19.02,
+        "n": 486,
+        "mean": 10.16,
+        "max": 27.92
+      },
+      "qdrant": {
+        "p50": 18.75,
+        "p95": 28.77,
+        "p99": 32.67,
+        "n": 486,
+        "mean": 17.39,
+        "max": 40.72
+      },
+      "fusion": {
+        "p50": 0.18,
+        "p95": 0.26,
+        "p99": 0.36,
+        "n": 486,
+        "mean": 0.17,
+        "max": 0.77
+      },
+      "total": {
+        "p50": 50.07,
+        "p95": 64.56,
+        "p99": 73.93,
+        "n": 486,
+        "mean": 49.25,
+        "max": 94.67
+      }
+    },
+    "process_rss": {
+      "start_mb": 1016.0,
+      "peak_mb": 1017.0,
+      "mean_mb": 1017.0
+    }
+  },
+  "http_retrieve": {
+    "endpoint": "POST /retrieve",
+    "includes": [
+      "dense encode",
+      "sparse encode",
+      "Qdrant query",
+      "RRF fusion",
+      "HTTP/JSON over loopback",
+      "server queueing under concurrency"
+    ],
+    "excludes": [
+      "LLM router",
+      "LLM generation",
+      "internet network latency"
+    ],
+    "workload": "closed loop: N workers, each sends its next request when one returns",
+    "requests_per_level": 300,
+    "warmup_excluded": 20,
+    "top_k": 10,
+    "levels": {
+      "1": {
+        "concurrency": 1,
+        "requests": 300,
+        "errors": 0,
+        "error_rate": 0.0,
+        "error_examples": [],
+        "wall_s": 14.54,
+        "throughput_rps": 20.64,
+        "peak_in_flight": 1,
+        "latency_ms": {
+          "p50": 50.43,
+          "p95": 61.99,
+          "p99": 73.18,
+          "n": 300,
+          "mean": 48.45,
+          "max": 155.61
+        },
+        "server_ms": {
+          "p50": 48.23,
+          "p95": 59.39,
+          "p99": 70.72,
+          "n": 300,
+          "mean": 46.14,
+          "max": 153.34
+        },
+        "client_minus_server_ms": {
+          "p50": 2.13,
+          "p95": 2.99,
+          "p99": 6.44,
+          "n": 300,
+          "mean": 2.31,
+          "max": 9.12
+        },
+        "server_rss": {
+          "start_mb": 1462.6,
+          "peak_mb": 1463.6,
+          "mean_mb": 1463.4
+        },
+        "qdrant_container_memory": "285.5MiB / 7.608GiB"
+      },
+      "5": {
+        "concurrency": 5,
+        "requests": 300,
+        "errors": 0,
+        "error_rate": 0.0,
+        "error_examples": [],
+        "wall_s": 11.47,
+        "throughput_rps": 26.16,
+        "peak_in_flight": 5,
+        "latency_ms": {
+          "p50": 188.36,
+          "p95": 215.01,
+          "p99": 325.64,
+          "n": 300,
+          "mean": 190.3,
+          "max": 373.61
+        },
+        "server_ms": {
+          "p50": 184.47,
+          "p95": 210.82,
+          "p99": 315.23,
+          "n": 300,
+          "mean": 186.62,
+          "max": 360.03
+        },
+        "client_minus_server_ms": {
+          "p50": 3.12,
+          "p95": 7.51,
+          "p99": 10.4,
+          "n": 300,
+          "mean": 3.67,
+          "max": 13.82
+        },
+        "server_rss": {
+          "start_mb": 1463.6,
+          "peak_mb": 1469.5,
+          "mean_mb": 1468.6
+        },
+        "qdrant_container_memory": "288.6MiB / 7.608GiB"
+      },
+      "20": {
+        "concurrency": 20,
+        "requests": 300,
+        "errors": 0,
+        "error_rate": 0.0,
+        "error_examples": [],
+        "wall_s": 11.81,
+        "throughput_rps": 25.39,
+        "peak_in_flight": 20,
+        "latency_ms": {
+          "p50": 782.51,
+          "p95": 862.5,
+          "p99": 905.06,
+          "n": 300,
+          "mean": 777.27,
+          "max": 920.77
+        },
+        "server_ms": {
+          "p50": 771.09,
+          "p95": 854.25,
+          "p99": 887.57,
+          "n": 300,
+          "mean": 767.04,
+          "max": 893.94
+        },
+        "client_minus_server_ms": {
+          "p50": 7.29,
+          "p95": 30.27,
+          "p99": 42.55,
+          "n": 300,
+          "mean": 10.23,
+          "max": 47.98
+        },
+        "server_rss": {
+          "start_mb": 1469.5,
+          "peak_mb": 1484.3,
+          "mean_mb": 1483.3
+        },
+        "qdrant_container_memory": "291.5MiB / 7.608GiB"
+      },
+      "50": {
+        "concurrency": 50,
+        "requests": 300,
+        "errors": 0,
+        "error_rate": 0.0,
+        "error_examples": [],
+        "wall_s": 11.83,
+        "throughput_rps": 25.35,
+        "peak_in_flight": 50,
+        "latency_ms": {
+          "p50": 1738.3,
+          "p95": 2806.43,
+          "p99": 3283.23,
+          "n": 300,
+          "mean": 1892.31,
+          "max": 3289.64
+        },
+        "server_ms": {
+          "p50": 1523.88,
+          "p95": 1744.3,
+          "p99": 1850.07,
+          "n": 300,
+          "mean": 1506.82,
+          "max": 1980.13
+        },
+        "client_minus_server_ms": {
+          "p50": 173.72,
+          "p95": 1262.47,
+          "p99": 1653.51,
+          "n": 300,
+          "mean": 385.5,
+          "max": 1747.26
+        },
+        "server_rss": {
+          "start_mb": 1484.2,
+          "peak_mb": 1500.7,
+          "mean_mb": 1499.3
+        },
+        "qdrant_container_memory": "281.4MiB / 7.608GiB"
+      }
+    }
+  },
+  "e2e_search": {
+    "endpoint": "POST /search",
+    "includes": [
+      "LLM router call",
+      "hybrid retrieval (local route) or SearXNG web search (web route)",
+      "LLM answer generation",
+      "HTTP/JSON over loopback"
+    ],
+    "excludes": [],
+    "model": "gemma-4-12B-it-Q4_0.gguf",
+    "llm_settings": {
+      "n_ctx": 4096,
+      "n_threads": 6,
+      "n_gpu_layers": -1,
+      "max_tokens": 1024
+    },
+    "searxng_reachable": true,
+    "note": "llama.cpp calls are serialized by a lock, so concurrent /search requests queue",
+    "warmup_excluded": 1,
+    "levels": {
+      "1": {
+        "concurrency": 1,
+        "requests": 20,
+        "errors": 0,
+        "error_rate": 0.0,
+        "error_examples": [],
+        "wall_s": 31.98,
+        "throughput_rps": 0.63,
+        "peak_in_flight": 1,
+        "latency_ms": {
+          "p50": 1619.43,
+          "p95": 1924.41,
+          "p99": 2021.62,
+          "n": 20,
+          "mean": 1598.78,
+          "max": 2045.92
+        },
+        "server_ms": {
+          "n": 0
+        },
+        "client_minus_server_ms": {
+          "n": 0
+        },
+        "routing": {
+          "web": 20
+        },
+        "server_rss": {
+          "start_mb": 4067.2,
+          "peak_mb": 4112.5,
+          "mean_mb": 4085.6
+        }
+      },
+      "5": {
+        "concurrency": 5,
+        "requests": 20,
+        "errors": 0,
+        "error_rate": 0.0,
+        "error_examples": [],
+        "wall_s": 28.3,
+        "throughput_rps": 0.71,
+        "peak_in_flight": 5,
+        "latency_ms": {
+          "p50": 6836.98,
+          "p95": 7809.34,
+          "p99": 8285.88,
+          "n": 20,
+          "mean": 6382.82,
+          "max": 8405.02
+        },
+        "server_ms": {
+          "n": 0
+        },
+        "client_minus_server_ms": {
+          "n": 0
+        },
+        "routing": {
+          "local": 1,
+          "web": 19
+        },
+        "server_rss": {
+          "start_mb": 4101.1,
+          "peak_mb": 4308.0,
+          "mean_mb": 4272.9
+        }
+      }
+    }
+  },
+  "background_load": {
+    "note": "taken while the benchmark held no models; load here is other processes'",
+    "before": {
+      "cpu_busy_pct": 11.5,
+      "gpu": {
+        "utilization_pct": 20.0,
+        "memory_used_mb": 464.0,
+        "memory_total_mb": 12282.0,
+        "processes": {
+          "[Insufficient Permissions]": 3,
+          "explorer.exe": 1,
+          "firefox.exe": 1
+        }
+      }
+    },
+    "after": {
+      "cpu_busy_pct": 16.4,
+      "gpu": {
+        "utilization_pct": 3.0,
+        "memory_used_mb": 464.0,
+        "memory_total_mb": 12282.0,
+        "processes": {
+          "[Insufficient Permissions]": 3,
+          "explorer.exe": 1,
+          "firefox.exe": 1
+        }
+      }
+    }
+  }
+}
