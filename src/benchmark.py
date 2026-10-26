@@ -52,6 +52,15 @@ def cpu_model() -> str:
     return platform.processor() or platform.machine()
 
 
+def os_name() -> str:
+    """OS name and version; Python before 3.12 reports Windows 11 as release "10"."""
+    system, release, version = platform.system(), platform.release(), platform.version()
+    build = version.rsplit(".", 1)[-1]
+    if system == "Windows" and release == "10" and build.isdigit() and int(build) >= 22000:
+        release = "11"
+    return f"{system} {release} ({version})"
+
+
 def hardware() -> dict:
     """The machine facts a latency number is meaningless without."""
     import torch
@@ -64,7 +73,7 @@ def hardware() -> dict:
         "torch_threads": torch.get_num_threads(),
         "gpu": gpu or "none",
         "ram_gb": round(psutil.virtual_memory().total / 2**30, 1),
-        "os": f"{platform.system()} {platform.release()}",
+        "os": os_name(),
         "python": platform.python_version(),
     }
 
