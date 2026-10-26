@@ -1,10 +1,13 @@
 """Latency benchmark helpers: percentiles, hardware facts, memory sampling, HTTP workloads."""
 
 import asyncio
+import ntpath
 import os
 import platform
+import subprocess
 import threading
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 
@@ -64,6 +67,39 @@ def hardware() -> dict:
         "os": f"{platform.system()} {platform.release()}",
         "python": platform.python_version(),
     }
+
+
+def _nvidia_smi(query: str) -> list[list[str]]:
+    out = subprocess.run(
+        ["nvidia-smi", query, "--format=csv,noheader,nounits"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    ).stdout
+    return [[c.strip() for c in line.split(",", 2)] for line in out.splitlines() if line.strip()]
+
+
+def gpu_load() -> dict | None:
+    """Utilization, memory and processes of GPU 0 per nvidia-smi; None without nvidia-smi."""
+    try:
+        query = "--query-gpu=utilization.gpu,memory.used,memory.total"
+        util, used, total = (float(x) for x in _nvidia_smi(query)[0])
+        apps = _nvidia_smi("--query-compute-apps=pid,process_name")
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return None
+    names = Counter(ntpath.basename(row[-1]) for row in apps)  # handles \ and / on any OS
+    return {
+        "utilization_pct": util,
+        "memory_used_mb": used,
+        "memory_total_mb": total,
+        "processes": dict(sorted(names.items())),
+    }
+
+
+def background_load() -> dict:
+    """CPU and GPU load while the benchmark itself is idle, i.e. other processes' load."""
+    return {"cpu_busy_pct": psutil.cpu_percent(interval=1.0), "gpu": gpu_load()}
 
 
 class MemorySampler:

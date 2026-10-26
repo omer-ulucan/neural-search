@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.benchmark import (  # noqa: E402
     MemorySampler,
     RequestResult,
+    background_load,
     hardware,
     run_workload,
     summarize,
@@ -348,6 +349,8 @@ def main() -> None:
     git = git_state(ROOT)
     if git["dirty"]:
         logger.warning("Working tree is dirty; results will be marked dirty")
+    load_before = background_load()
+    logger.info("Background load before: %s", load_before)
     # The models live only in a child process that exits before the servers start, so
     # their memory is really returned; a 14 GB machine cannot hold three copies plus an LLM.
     with multiprocessing.get_context("spawn").Pool(1) as pool:
@@ -367,6 +370,12 @@ def main() -> None:
     out["e2e_search"] = (
         {"skipped": "--skip-e2e"} if args.skip_e2e else bench_e2e_search(args, queries)
     )
+    out["background_load"] = {
+        "note": "taken while the benchmark held no models; load here is other processes'",
+        "before": load_before,
+        "after": background_load(),
+    }
+    logger.info("Background load after: %s", out["background_load"]["after"])
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(out, indent=2) + "\n")
     logger.info("Wrote %s", args.output)
