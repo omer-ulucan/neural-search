@@ -10,13 +10,18 @@ DENSE_VECTOR = ""
 SPARSE_VECTOR = "lexical-sparse"
 
 
+def qdrant_client() -> QdrantClient:
+    """Client for QDRANT_HOST whose QDRANT_TIMEOUT lets a slow bulk upsert finish."""
+    return QdrantClient(settings.QDRANT_HOST, timeout=settings.QDRANT_TIMEOUT)
+
+
 def init_qdrant(
     client: QdrantClient | None = None,
     collection: str | None = None,
     dense_dim: int | None = None,
 ) -> QdrantClient:
     """Initialize Qdrant client and create collection if it does not exist."""
-    client = client or QdrantClient(settings.QDRANT_HOST)
+    client = client or qdrant_client()
     collection = collection or settings.COLLECTION_NAME
     if not client.collection_exists(collection):
         client.create_collection(

@@ -198,6 +198,7 @@ All variables can be set in `.env` or exported directly. The `.env` file is auto
 |----------|---------|-------------|
 | `MODEL_PATH` | *(required)* | Absolute path to the Gemma 4 GGUF model |
 | `QDRANT_HOST` | `http://localhost:6333` | Qdrant REST API endpoint |
+| `QDRANT_TIMEOUT` | `60` | Seconds per Qdrant request; bulk upserts can outlast the client default of 5 s |
 | `COLLECTION_NAME` | `technical_docs` | Qdrant collection name |
 | `SEARXNG_HOST` | `http://localhost:8080` | SearXNG instance URL |
 | `DENSE_DIM` | `1024` | Dimensionality of dense vectors (BGE-large) |
