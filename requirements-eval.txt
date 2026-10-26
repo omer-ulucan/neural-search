@@ -1,0 +1,6 @@
+-r requirements.txt
+ir_measures==0.4.3
+pytrec-eval-terrier==0.5.11
+bm25s==0.3.15
+PyStemmer==3.1.0
+psutil==7.2.2
