@@ -86,12 +86,69 @@ def test_eval_table_lists_every_config_with_test_metrics():
     out = load().eval_tables(EVAL)
     assert "| BM25 baseline (bm25s) | 0.100 | 0.200 |" in out
     assert (
-        "| Hybrid RRF, equal weights, k=60 (default) | 0.400 | 0.500 | k=60, w=(1.0, 1.0) |" in out
+        "| Hybrid RRF, equal weights, k=60 (common default) | 0.400 | 0.500 | k=60, w=(1.0, 1.0) |"
+        in out
     )
     assert "| Hybrid RRF, dynamic weights (dev-tuned) | 0.440 | 0.560 | k=10, strength=0.5 |" in out
     assert "| dev | 0.500 | 0.400 |" in out and "| test | 0.450 | 0.400 |" in out
     assert "**not kept (off by default)**" in out
     assert "`abcdef1234`" in out and "held-out **test** split" in out
+
+
+def test_kept_dynamic_weights_show_a_tiny_dev_delta_instead_of_zero():
+    ev = {**EVAL, "dynamic_weights_decision": {**EVAL["dynamic_weights_decision"]}}
+    ev["dynamic_weights_decision"].update(keep=True, dev_delta=0.000027)
+    out = load().eval_tables(ev)
+    assert "dev nDCG@10 delta +0.00003" in out and "**kept (on by default)**" in out
+
+
+def stages(p50):
+    return {"p50": p50, "p95": p50 + 1, "p99": p50 + 2, "n": 500}
+
+
+BENCH = {
+    "generated_at": "2026-01-01T00:00:00+00:00",
+    "git": {"commit": "abcdef1234567890", "dirty": False},
+    "hardware": {
+        "cpu": "cpu-x",
+        "physical_cores": 8,
+        "logical_cores": 16,
+        "torch_threads": 8,
+        "gpu": "gpu-y",
+        "ram_gb": 32.0,
+    },
+    "qdrant_server": "1.20.0",
+    "corpus": {"index": {"distinct_sources": 10, "points": 12}},
+    "retrieval_in_process": {
+        "queries": 500,
+        "warmup_excluded": 20,
+        "top_k": 10,
+        "rrf_k": 10,
+        "dynamic_weights": True,
+        "includes": ["dense encode"],
+        "excludes": ["LLM"],
+        "stages_ms": {
+            s: stages(i)
+            for i, s in enumerate(["dense_encode", "sparse_encode", "qdrant", "fusion", "total"])
+        },
+    },
+    "http_retrieve": {"skipped": "--skip-http"},
+    "e2e_search": {"skipped": "--skip-e2e"},
+    "background_load": {
+        "before": {"cpu_busy_pct": 3.2, "gpu": {"utilization_pct": 1.0, "memory_used_mb": 400.0}},
+        "after": {"cpu_busy_pct": 41.0, "gpu": None},
+    },
+}
+
+
+def test_bench_table_reports_settings_and_background_load():
+    out = load().bench_tables(BENCH)
+    assert "rrf_k=10, dynamic weights on" in out
+    assert "before CPU 3%, GPU 1% (400 MB); after CPU 41%." in out
+    assert "| **Retrieval total** | 4.0 | 5.0 | 6.0 | 500 |" in out
+    assert "End to end `/search` was not measured: --skip-e2e." in out
+    older = {k: v for k, v in BENCH.items() if k != "background_load"}
+    assert "Load from other processes" not in load().bench_tables(older)
 
 
 def test_update_replaces_only_between_markers():
