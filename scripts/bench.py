@@ -327,7 +327,12 @@ def main() -> None:
     p.add_argument("--top-k", type=int, default=10)
     p.add_argument("--warmup", type=int, default=20)
     p.add_argument("--queries", type=int, default=0, help="Measured queries (0 = all)")
-    p.add_argument("--min-queries", type=int, default=500)
+    p.add_argument(
+        "--min-queries",
+        type=int,
+        default=400,
+        help="Fail if fewer measured queries remain after warmup (webmasters has 506 in total)",
+    )
     p.add_argument("--concurrency", type=int, nargs="+", default=[1, 5, 20, 50])
     p.add_argument("--http-requests", type=int, default=300, help="Requests per level")
     p.add_argument("--model-path", default=settings.MODEL_PATH)
