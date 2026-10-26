@@ -58,3 +58,18 @@ def test_hardware_reports_cpu_threads_and_gpu():
     hw = hardware()
     assert hw["cpu"] and hw["logical_cores"] >= 1 and hw["torch_threads"] >= 1
     assert hw["gpu"]
+
+
+def test_windows_cpu_uses_registry_name(monkeypatch):
+    from src import benchmark
+
+    def no_cpuinfo(*args, **kwargs):
+        raise OSError
+
+    monkeypatch.setattr(benchmark, "open", no_cpuinfo, raising=False)
+    monkeypatch.setattr(benchmark.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(benchmark.platform, "processor", lambda: "Intel64 Family 6")
+    monkeypatch.setattr(benchmark, "windows_cpu_name", lambda: "Intel(R) Core(TM) i7-13700HX")
+    assert benchmark.cpu_model() == "Intel(R) Core(TM) i7-13700HX"
+    monkeypatch.setattr(benchmark, "windows_cpu_name", lambda: None)
+    assert benchmark.cpu_model() == "Intel64 Family 6"
