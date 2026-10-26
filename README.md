@@ -34,7 +34,7 @@ Retrieval quality is measured on a public benchmark (BEIR CQADupStack) and laten
 - **Chunking.** Each document is split into windows of at most 320 tokens with 48 tokens (15%) overlap, measured with the same WordPiece vocabulary both models use, so neither model truncates. Chunks keep their original text and store `source`, `title`, `chunk_index` and character offsets.
 - **Idempotent ingestion.** Point ids are `uuid5(source#chunk_index)` and every point carries a fingerprint of its document text plus chunking and model config. Re-running ingestion skips unchanged documents, re-embeds changed ones, deletes chunks a shrunken document no longer produces, and prunes documents that were removed from the folder.
 - **Fusion.** Weighted RRF with 1-based ranks: `score(d) = sum_i w_i / (rrf_k + rank_i(d))`. `rrf_k` (default 10, selected on the dev split) is the smoothing constant and is independent of `top_k`, the number of results returned. A document missing from one ranking gets nothing from it, and ties are broken by best single-list rank, then id, so results are deterministic.
-- **Why fusion is client-side.** Qdrant 1.20 has a parameterised RRF query, but probing it against a live server showed 0-based ranks (rank 1 in both lists scores 2/60, not 2/61) and weights that do not follow `w_i / (k + rank_i)`. Both per-retriever rankings come back from one batched request anyway, which is also what the demo endpoint returns.
+- **Why fusion is client-side.** Qdrant 1.20 has a parameterised RRF query, but probing it against a live server showed 0-based ranks (rank 1 in both lists scores 2/60, not 2/61) and weights that do not follow `w_i / (k + rank_i)`. Both per-retriever rankings come back from one batched request anyway, which is also what `/retrieve` returns.
 - **Dynamic weights.** `src/weighting.py` leans the fusion towards SPLADE for queries with exact-match signals (identifiers, code, paths, file names, flags, error codes, versions, quoted text) and towards the dense model for natural-language questions, and records the reasons. It is on by default at strength 0.25 because it passed the evaluation's dev-split rule (beat equal weights on dev nDCG@10), but the margin is small and not significant on the test split; see [Results](#results). `DYNAMIC_WEIGHTS=false` gives plain static weights.
 - **Empty sparse vectors.** If SPLADE maps a query to an empty vector, hybrid retrieval falls back to dense-only for that query and logs it.
 
@@ -62,6 +62,8 @@ Not measured yet. Run `python scripts/eval.py` and then this script.
 <!-- bench:start -->
 Not measured yet. Run `python scripts/bench.py` and then this script.
 <!-- bench:end -->
+
+`/search` latency depends on the route. The router sends general technical questions, which is most of CQADupStack, to the web route (see the Routing column), so those rows time a SearXNG search plus generation and move with the search engines' response time and the answer length. When SearXNG's engines are blocked the model answers that the passages are not enough, which is quick; see [Troubleshooting](#troubleshooting).
 
 ## Reproduce
 
@@ -148,13 +150,13 @@ Request fields: `query` (required), `top_k` (1 to 50, default 10), `rrf_k` (opti
 
 ```json
 {
-  "query": "...", "top_k": 5, "rrf_k": 60,
-  "weights": {"dense": 1.0, "sparse": 1.0, "reasons": []},
+  "query": "...", "top_k": 5, "rrf_k": 10,
+  "weights": {"dense": 0.75, "sparse": 1.25, "reasons": ["lexical:error_code"]},
   "sparse_fallback": false,
   "sparse": [{"rank": 1, "score": 15.4, "id": "...", "title": "...", "source": "...",
               "chunk_index": 0, "snippet": "...", "dense_rank": null, "sparse_rank": null}],
   "dense":  [...],
-  "fused":  [{"rank": 1, "score": 0.0328, "...": "...", "dense_rank": 1, "sparse_rank": 1}],
+  "fused":  [{"rank": 1, "score": 0.1818, "...": "...", "dense_rank": 1, "sparse_rank": 1}],
   "timing_ms": {"dense_encode": 0.0, "sparse_encode": 0.0, "qdrant": 0.0, "fusion": 0.0, "total": 0.0}
 }
 ```
@@ -169,7 +171,7 @@ Router, retrieval or web search, and a cited answer. Returns `503` when no `MODE
 {
   "answer": "Enable gzip in the server config [1] ...",
   "routing": "local",
-  "sources": [{"n": 1, "title": "...", "source": "speed.md", "chunk_index": 0, "text": "...", "score": 0.0325}]
+  "sources": [{"n": 1, "title": "...", "source": "speed.md", "chunk_index": 0, "text": "...", "score": 0.1761}]
 }
 ```
 
