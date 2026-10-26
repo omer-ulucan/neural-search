@@ -1,5 +1,6 @@
 import asyncio
 import os
+import subprocess
 
 import pytest
 
@@ -73,3 +74,40 @@ def test_windows_cpu_uses_registry_name(monkeypatch):
     assert benchmark.cpu_model() == "Intel(R) Core(TM) i7-13700HX"
     monkeypatch.setattr(benchmark, "windows_cpu_name", lambda: None)
     assert benchmark.cpu_model() == "Intel64 Family 6"
+
+
+def test_gpu_load_parses_nvidia_smi(monkeypatch):
+    from src import benchmark
+
+    outputs = {
+        "--query-gpu=utilization.gpu,memory.used,memory.total": "98, 2095, 12282\n",
+        "--query-compute-apps=pid,process_name": "\n".join(
+            [
+                r"16036, C:\Windows\explorer.exe",
+                r"15040, C:\Python312\python.exe",
+                "7504, /usr/bin/python.exe",
+            ]
+        ),
+    }
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout=outputs[cmd[1]])
+
+    monkeypatch.setattr(benchmark.subprocess, "run", fake_run)
+    assert benchmark.gpu_load() == {
+        "utilization_pct": 98.0,
+        "memory_used_mb": 2095.0,
+        "memory_total_mb": 12282.0,
+        "processes": {"explorer.exe": 1, "python.exe": 2},
+    }
+
+
+def test_gpu_load_is_none_without_nvidia_smi(monkeypatch):
+    from src import benchmark
+
+    def missing(cmd, **kwargs):
+        raise FileNotFoundError(cmd[0])
+
+    monkeypatch.setattr(benchmark.subprocess, "run", missing)
+    assert benchmark.gpu_load() is None
+    assert benchmark.background_load()["gpu"] is None
