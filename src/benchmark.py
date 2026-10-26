@@ -24,6 +24,18 @@ def summarize(values_ms: Sequence[float]) -> dict[str, float]:
     return out
 
 
+def windows_cpu_name() -> str | None:
+    """Marketing name of the CPU from the registry; platform.processor() is only a family id."""
+    try:
+        import winreg
+
+        path = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path) as key:
+            return winreg.QueryValueEx(key, "ProcessorNameString")[0].strip() or None
+    except (ImportError, OSError):
+        return None
+
+
 def cpu_model() -> str:
     try:
         with open("/proc/cpuinfo") as fh:
@@ -32,6 +44,8 @@ def cpu_model() -> str:
                     return line.split(":", 1)[1].strip()
     except OSError:
         pass
+    if platform.system() == "Windows" and (name := windows_cpu_name()):
+        return name
     return platform.processor() or platform.machine()
 
 
