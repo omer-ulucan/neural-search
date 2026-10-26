@@ -24,7 +24,7 @@ Retrieval quality is measured on a public benchmark (BEIR CQADupStack) and laten
                           |
               dense ranking     sparse ranking
                     \              /
-             weighted RRF: sum_i w_i / (k + rank_i), k = 60
+             weighted RRF: sum_i w_i / (k + rank_i), k = 10
                           |
                     fused ranking
 ```
@@ -33,9 +33,9 @@ Retrieval quality is measured on a public benchmark (BEIR CQADupStack) and laten
 - **Sparse path.** `naver/splade-cocondenser-ensembledistil`, a learned sparse model that expands queries and documents over the BERT vocabulary. It is not BM25; BM25 appears only as a baseline in the evaluation.
 - **Chunking.** Each document is split into windows of at most 320 tokens with 48 tokens (15%) overlap, measured with the same WordPiece vocabulary both models use, so neither model truncates. Chunks keep their original text and store `source`, `title`, `chunk_index` and character offsets.
 - **Idempotent ingestion.** Point ids are `uuid5(source#chunk_index)` and every point carries a fingerprint of its document text plus chunking and model config. Re-running ingestion skips unchanged documents, re-embeds changed ones, deletes chunks a shrunken document no longer produces, and prunes documents that were removed from the folder.
-- **Fusion.** Weighted RRF with 1-based ranks: `score(d) = sum_i w_i / (rrf_k + rank_i(d))`. `rrf_k` (default 60) is the smoothing constant and is independent of `top_k`, the number of results returned. A document missing from one ranking gets nothing from it, and ties are broken by best single-list rank, then id, so results are deterministic.
+- **Fusion.** Weighted RRF with 1-based ranks: `score(d) = sum_i w_i / (rrf_k + rank_i(d))`. `rrf_k` (default 10, selected on the dev split) is the smoothing constant and is independent of `top_k`, the number of results returned. A document missing from one ranking gets nothing from it, and ties are broken by best single-list rank, then id, so results are deterministic.
 - **Why fusion is client-side.** Qdrant 1.20 has a parameterised RRF query, but probing it against a live server showed 0-based ranks (rank 1 in both lists scores 2/60, not 2/61) and weights that do not follow `w_i / (k + rank_i)`. Both per-retriever rankings come back from one batched request anyway, which is also what the demo endpoint returns.
-- **Dynamic weights (optional).** `src/weighting.py` leans the fusion towards SPLADE for queries with exact-match signals (identifiers, code, paths, file names, flags, error codes, versions, quoted text) and towards the dense model for natural-language questions, and records the reasons. It is off by default; whether it earns its place is decided by the evaluation below.
+- **Dynamic weights.** `src/weighting.py` leans the fusion towards SPLADE for queries with exact-match signals (identifiers, code, paths, file names, flags, error codes, versions, quoted text) and towards the dense model for natural-language questions, and records the reasons. It is on by default at strength 0.25 because it passed the evaluation's dev-split rule (beat equal weights on dev nDCG@10), but the margin is small and not significant on the test split; see [Results](#results). `DYNAMIC_WEIGHTS=false` gives plain static weights.
 - **Empty sparse vectors.** If SPLADE maps a query to an empty vector, hybrid retrieval falls back to dense-only for that query and logs it.
 
 ## Answering layer
@@ -136,7 +136,7 @@ Open `http://localhost:8000/` for the web UI.
 
 ### `POST /retrieve`
 
-Retrieval only, no router and no LLM. Returns the SPLADE ranking, the dense ranking and the fused ranking side by side, which is what the live demo renders.
+Retrieval only, no router and no LLM. Returns the SPLADE ranking, the dense ranking and the fused ranking side by side, with raw scores, for a side-by-side view of the three. The bundled web UI at `/` uses `/search`.
 
 ```bash
 curl -X POST http://localhost:8000/retrieve \
@@ -194,12 +194,12 @@ All settings are environment variables, also read from `.env` (see `.env.example
 | `CHUNK_SIZE` | `320` | Tokens per chunk |
 | `CHUNK_OVERLAP` | `48` | Tokens shared by consecutive chunks |
 | `EMBED_BATCH_SIZE` | `16` | Texts per model forward pass |
-| `RRF_K` | `60` | RRF smoothing constant |
+| `RRF_K` | `10` | RRF smoothing constant, selected on the dev split |
 | `TOP_K` | `5` | Chunks returned to the LLM by `/search` |
 | `CANDIDATE_DEPTH` | `50` | Results fetched from each retriever before fusion |
 | `DENSE_WEIGHT`, `SPARSE_WEIGHT` | `1.0`, `1.0` | Static RRF weights |
-| `DYNAMIC_WEIGHTS` | `false` | Use query-dependent weights instead |
-| `DYNAMIC_STRENGTH` | `0.5` | How far dynamic weights lean, 0 to 1 |
+| `DYNAMIC_WEIGHTS` | `true` | Use query-dependent weights instead of the static ones |
+| `DYNAMIC_STRENGTH` | `0.25` | How far dynamic weights lean, 0 to 1, selected on the dev split |
 | `CORS_ORIGINS` | `https://ulucan.dev` and localhost ports | Comma-separated browser origins |
 | `N_CTX`, `N_THREADS`, `N_GPU_LAYERS` | `8192`, `6`, `0` | llama.cpp context, threads, GPU offload |
 
@@ -231,7 +231,7 @@ neural-search/
 │   ├── database.py             # Qdrant collection setup
 │   ├── ingestion.py            # stable ids, fingerprints, stale-chunk cleanup
 │   ├── retrieval.py            # dense / sparse / hybrid retrieval and weighted RRF
-│   ├── weighting.py            # optional query-dependent weights
+│   ├── weighting.py            # query-dependent weights (on by default)
 │   ├── inference.py            # llama.cpp wrapper and RAG prompt
 │   ├── graph.py                # LangGraph router, local and web search, generator
 │   ├── evaluation.py           # dataset, split, metrics helpers
@@ -247,6 +247,7 @@ neural-search/
 - **The server fails to start with a model error.** `MODEL_PATH` must be an absolute path to an existing `.gguf`, and `llama-cpp-python>=0.3.25` is needed for Gemma 4.
 - **Qdrant version warnings or errors.** The server image and `qdrant-client` are both pinned to 1.20. A volume created by an older server (for example v1.12) is several minor versions behind; start from a fresh volume and re-run ingestion.
 - **Web route returns nothing.** `searxng/settings.yml` must keep `use_default_settings: true` and the `json` format; restart with `docker compose restart searxng`.
+- **Web answers say the passages are not enough.** The web route depends on SearXNG's Google and Bing engines, which search providers may block or degrade for your IP. Check what comes back with `curl "http://localhost:8080/search?q=htaccess+redirect&format=json&engines=google,bing"`; `unresponsive_engines` lists blocked engines, and off-topic titles mean the engine is not passing the full query through.
 - **`NumPy 2.x cannot be run in NumPy 1.x`.** `pip install "numpy<2" --force-reinstall`.
 
 ## License
