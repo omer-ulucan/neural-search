@@ -293,14 +293,13 @@ def bench_e2e_search(args, queries: list[str]) -> dict:
 def model_phase(args) -> dict:
     """Load models, verify the corpus and run the in-process benchmark (child process)."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    from qdrant_client import QdrantClient
-
+    from src.database import qdrant_client
     from src.embedder import LocalHybridEmbedder
     from src.retrieval import Retriever
     from src.weighting import QueryWeighting
 
     embedder = LocalHybridEmbedder()
-    client = QdrantClient(settings.QDRANT_HOST)
+    client = qdrant_client()
     corpus = verify_corpus(args, embedder, client)
     queries = corpus.pop("_queries")
     weighting = QueryWeighting(settings.DYNAMIC_STRENGTH) if settings.DYNAMIC_WEIGHTS else None
