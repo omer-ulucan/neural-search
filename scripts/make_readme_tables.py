@@ -163,14 +163,22 @@ def bench_tables(b: dict) -> str:
     e2e = b["e2e_search"]
     lines.append("")
     if "levels" in e2e:
+        llm = e2e["llm_settings"]
+        layers = "all" if llm["n_gpu_layers"] == -1 else llm["n_gpu_layers"]
+        note = f" {e2e['note']}." if e2e.get("note") else ""
+        lines += [
+            f"End to end `POST /search` ({e2e['model']}, n_ctx {llm['n_ctx']}, {layers} layers "
+            f"on GPU; router, retrieval or web search, generation and HTTP/JSON).{note}",
+            "",
+            "| Concurrency | Queries | Routing | Error rate | p50 s | p95 s | p99 s |",
+            "|---:|---:|---|---:|---:|---:|---:|",
+        ]
         for c, lv in e2e["levels"].items():
             lat = lv["latency_ms"]
+            routes = ", ".join(f"{r} {n}" for r, n in sorted(lv["routing"].items()))
             lines.append(
-                f"End to end `POST /search` ({e2e['model']}, n_ctx {e2e['llm_settings']['n_ctx']}, "
-                f"router + retrieval or web search + generation, concurrency {c}, "
-                f"{lv['requests']} queries, routing {lv['routing']}, errors {lv['errors']}): "
-                f"p50 {lat['p50'] / 1000:.1f} s, p95 {lat['p95'] / 1000:.1f} s, "
-                f"p99 {lat['p99'] / 1000:.1f} s."
+                f"| {c} | {lv['requests']} | {routes} | {lv['error_rate']:.1%} "
+                f"| {lat['p50'] / 1000:.1f} | {lat['p95'] / 1000:.1f} | {lat['p99'] / 1000:.1f} |"
             )
     else:
         lines.append(f"End to end `/search` was not measured: {e2e.get('skipped')}.")

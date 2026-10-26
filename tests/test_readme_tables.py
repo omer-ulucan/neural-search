@@ -151,6 +151,23 @@ def test_bench_table_reports_settings_and_background_load():
     assert "Load from other processes" not in load().bench_tables(older)
 
 
+def test_bench_table_renders_search_levels_as_rows():
+    lat = {"p50": 1600.0, "p95": 1900.0, "p99": 2040.0, "n": 20}
+    level = {"requests": 20, "error_rate": 0.05, "routing": {"web": 19, "local": 1}}
+    e2e = {
+        "model": "m.gguf",
+        "llm_settings": {"n_ctx": 4096, "n_gpu_layers": -1},
+        "note": "llama.cpp calls are serialized",
+        "levels": {"1": {**level, "latency_ms": lat}, "5": {**level, "latency_ms": lat}},
+    }
+    out = load().bench_tables({**BENCH, "e2e_search": e2e})
+    assert "| 1 | 20 | local 1, web 19 | 5.0% | 1.6 | 1.9 | 2.0 |" in out
+    assert "| 5 | 20 | local 1, web 19 |" in out
+    assert "n_ctx 4096, all layers on GPU;" in out and "llama.cpp calls are serialized." in out
+    cpu = {**e2e, "llm_settings": {"n_ctx": 4096, "n_gpu_layers": 0}}
+    assert "n_ctx 4096, 0 layers on GPU;" in load().bench_tables({**BENCH, "e2e_search": cpu})
+
+
 def test_update_replaces_only_between_markers():
     mod = load()
     readme = (
