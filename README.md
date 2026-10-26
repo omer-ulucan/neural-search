@@ -54,13 +54,62 @@ The router asks Gemma for one word, `local` or `web`; anything else (including G
 ## Results
 
 <!-- eval:start -->
-Not measured yet. Run `python scripts/eval.py` and then this script.
+BEIR CQADupStack (webmasters), held-out **test** split. webmasters: 239 dev / 267 test queries, 17405 docs, 20069 chunks. Every hybrid setting was chosen on the dev split only.
+
+| Configuration | nDCG@10 | Recall@100 | Setting |
+|---|---:|---:|---|
+| BM25 baseline (bm25s) | 0.293 | 0.563 |  |
+| SPLADE only | 0.312 | 0.572 |  |
+| Dense only (BGE-large) | 0.360 | 0.750 |  |
+| Hybrid RRF, equal weights, k=60 (common default) | 0.350 | 0.737 | k=60, w=(1.0, 1.0) |
+| Hybrid RRF, equal weights, dev-selected k | 0.363 | 0.737 | k=10, w=(1.0, 1.0) |
+| Hybrid RRF, dev-tuned static weights | 0.371 | 0.761 | k=10, w=(1.5, 0.5) |
+| Hybrid RRF, dynamic weights (dev-tuned) | 0.365 | 0.751 | k=10, strength=0.25 |
+
+RRF k sweep, equal weights, nDCG@10 (descriptive; k is selected on dev, here k=10):
+
+| Split | k=10 | k=30 | k=60 | k=100 |
+|---|---:|---:|---:|---:|
+| dev | 0.393 | 0.385 | 0.384 | 0.381 |
+| test | 0.363 | 0.353 | 0.350 | 0.348 |
+
+Dynamic weights vs equal weights: dev nDCG@10 delta +0.00003, so dynamic weighting is **kept (on by default)** (webmasters: test delta +0.002, 95% CI [-0.009, +0.014]).
+
+Models: `BAAI/bge-large-en-v1.5` and `naver/splade-cocondenser-ensembledistil`. Generated 2026-10-26T04:40:36+00:00 at commit `1dd80f004c` from `results/eval.json`.
 <!-- eval:end -->
 
 ## Latency
 
 <!-- bench:start -->
-Not measured yet. Run `python scripts/bench.py` and then this script.
+Hardware: 13th Gen Intel(R) Core(TM) i7-13700HX, 16 cores / 24 threads, torch threads 16, GPU: NVIDIA GeForce RTX 4080 Laptop GPU, 15.7 GB RAM. Qdrant 1.20.0 in Docker on the same machine. Corpus verified before timing: 17405 documents, 20069 chunks. Load from other processes, sampled while the benchmark held no models: before CPU 12%, GPU 20% (464 MB); after CPU 16%, GPU 3% (464 MB).
+
+Retrieval only, in process (486 queries, 20 warmup excluded, top_k=10, rrf_k=10, dynamic weights on, includes dense encode, sparse encode, Qdrant query, RRF fusion; excludes HTTP/JSON, network, LLM router, LLM generation):
+
+| Stage | p50 ms | p95 ms | p99 ms | n |
+|---|---:|---:|---:|---:|
+| Dense encode (BGE-large) | 19.5 | 29.0 | 39.5 | 486 |
+| Sparse encode (SPLADE) | 9.2 | 15.9 | 19.0 | 486 |
+| Qdrant query (both retrievers, one batch) | 18.8 | 28.8 | 32.7 | 486 |
+| RRF fusion | 0.2 | 0.3 | 0.4 | 486 |
+| **Retrieval total** | 50.1 | 64.6 | 73.9 | 486 |
+
+`POST /retrieve` over loopback HTTP, closed-loop workers (adds HTTP/JSON and queueing to the above):
+
+| Concurrency | Requests | Throughput req/s | Error rate | p50 ms | p95 ms | p99 ms | Server RSS peak MB |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 300 | 20.64 | 0.0% | 50 | 62 | 73 | 1464 |
+| 5 | 300 | 26.16 | 0.0% | 188 | 215 | 326 | 1470 |
+| 20 | 300 | 25.39 | 0.0% | 783 | 862 | 905 | 1484 |
+| 50 | 300 | 25.35 | 0.0% | 1738 | 2806 | 3283 | 1501 |
+
+End to end `POST /search` (gemma-4-12B-it-Q4_0.gguf, n_ctx 4096, all layers on GPU; router, retrieval or web search, generation and HTTP/JSON). llama.cpp calls are serialized by a lock, so concurrent /search requests queue.
+
+| Concurrency | Queries | Routing | Error rate | p50 s | p95 s | p99 s |
+|---:|---:|---|---:|---:|---:|---:|
+| 1 | 20 | web 20 | 0.0% | 1.6 | 1.9 | 2.0 |
+| 5 | 20 | local 1, web 19 | 0.0% | 6.8 | 7.8 | 8.3 |
+
+Generated 2026-10-26T08:55:26+00:00 at commit `21b509401b` from `results/bench.json`.
 <!-- bench:end -->
 
 `/search` latency depends on the route. The router sends general technical questions, which is most of CQADupStack, to the web route (see the Routing column), so those rows time a SearXNG search plus generation and move with the search engines' response time and the answer length. When SearXNG's engines are blocked the model answers that the passages are not enough, which is quick; see [Troubleshooting](#troubleshooting).
